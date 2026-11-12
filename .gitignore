@@ -1,4 +1,6 @@
 .gradle/
+.models/
+app/src/androidTest/assets/*.pcm
 build/
 **/build/
 local.properties

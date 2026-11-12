@@ -8,6 +8,16 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class EncodedPacketStoreTest {
+    @Test public void sixHoursWithoutMarkStillRetainsOnlyThirtySeconds() throws Exception {
+        java.io.File folder=java.nio.file.Files.createTempDirectory("bounded-history").toFile();
+        try(EncodedPacketStore store=new EncodedPacketStore(folder,30,16)) {
+            for(int second=0;second<6*60*60;second+=10)
+                store.append(true,second*1_000_000L,1,java.nio.ByteBuffer.wrap(new byte[]{1}));
+            assertTrue(store.bytesOnDisk()<=4);
+            assertTrue(store.snapshot().size()<=4);
+            assertTrue(folder.listFiles().length<=4);
+        }
+    }
     private EncodedPacketStore store() throws Exception {
         return new EncodedPacketStore(Files.createTempDirectory("encoded-history").toFile(), 2, 1024);
     }
@@ -47,6 +57,18 @@ public class EncodedPacketStoreTest {
         assertTrue(s.snapshot().get(0).video);
         s.close(); assertFalse(directory.exists());
     }
+    @Test public void audioAheadOfVideoKeyframeSurvivesGopEviction() throws Exception {
+        EncodedPacketStore s=new EncodedPacketStore(Files.createTempDirectory("audio-ahead").toFile(),0,1024);
+        try {
+            video(s,0,true);
+            s.append(false,1_010_000L,0,ByteBuffer.wrap(new byte[]{9}));
+            video(s,1_000_000L,true);
+            assertTrue(s.mark(0));
+            assertEquals(2,s.snapshot().size());
+            assertEquals(1_010_000L,s.snapshot().get(1).ptsUs);
+            assertEquals(9,s.snapshot().get(1).read().get(0));
+        } finally {s.close();}
+    }
     @Test public void zeroHistoryCanPinImmediatelyAfterFirstKeyframe() throws Exception {
         EncodedPacketStore s=store();
         try {video(s,1_000_000L,true); assertTrue(s.mark(0));
@@ -66,4 +88,3 @@ public class EncodedPacketStoreTest {
         } finally {s.close();}
     }
 }
-

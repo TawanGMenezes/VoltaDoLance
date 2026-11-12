@@ -1,39 +1,35 @@
-# Volta do Lance — alpha 0.2.1
+# Volta do Lance — alpha 0.3.0
 
-App Android independente, com nome, cores e textos próprios. Sem assinatura, cobrança, conta, anúncios ou envio de vídeos. Permissões: câmera e microfone; sem INTERNET.
+Aplicativo Android com identidade e textos próprios. Sem assinatura, cobrança, contas, anúncios ou upload. Somente CAMERA e RECORD_AUDIO; sem permissão INTERNET.
 
-## Novidades
+## Correções desta versão
 
-- Indicador vermelho REC piscando, com cronômetro do tempo após marcar. Estados separados de preparação, histórico ativo, gravação, salvamento, vídeo salvo e erro.
-- Botões de marcar/encerrar, galeria e ajustes acompanham o estado. Salvamento bloqueia novos comandos; falhas permitem retomar a câmera.
-- Frases de marcar e encerrar editáveis nos ajustes, persistidas apenas no aparelho. Padrões: “Marcar momento” e “Encerrar vídeo”. Fale a frase inteira; acentos, caixa e pontuação são ignorados. Apenas a hipótese final mais provável é usada; resultados parciais não acionam comandos.
-- Duração após marcar: 3, 10 (padrão), 20, 30, 60 minutos ou sem limite fixo. Parada com tentativa de salvamento por duração, pouco espaço, bateria em 5% fora do carregador ou estado térmico SEVERE do Android. A reserva inclui duas cópias do evento para montagem e publicação, mais margem e fragmentos futuros.
-- Qualidades consultadas em Camera2: tamanhos de MediaRecorder e prévia, duração mínima dos frames, faixas AE e codificador AVC. 4K30, 1080p60 e outros modos aparecem quando informados como compatíveis. 4K60 só aparece com suporte informado para essa combinação; não é prometido. Sessões de alta velocidade especiais não são usadas. Uma rejeição tenta modos inferiores e limpa o histórico incompatível antes de marcar. A qualidade ativa aparece na tela.
-- Galeria com miniaturas carregadas fora da interface e ícone de reprodução.
+- Uma única sessão Camera2 e codificadores AVC/AAC contínuos. A câmera não para/reinicia a cada quatro segundos nem ao marcar o lance. O MP4 usa uma linha do tempo comum, preservando os tempos entre áudio e vídeo.
+- Um único AudioRecord alimenta o vídeo e o reconhecedor offline de português (Vosk/modelo incluído no APK). A voz não disputa o microfone com outro serviço. A tela distingue carregando, aguardando áudio, ouvindo, frase ouvida e erro/repetição da tentativa.
+- Frases de marcar e encerrar personalizáveis e locais; acentos e caixa são ignorados, palavras completas são reconhecidas mesmo dentro de uma frase. “Encerrar” também funciona como comando de parada. Apenas hipóteses concluídas acionam comandos, evitando resultados parciais que mudam de interpretação.
+- Ao aceitar o início: REC vermelho piscando, cronômetro e um bip curto. Ao aceitar o fim: REC encerra, dois bips e estado de salvamento. Os sons usam o volume de mídia do aparelho e valem para voz e botões.
+- Botão para pausar o histórico e desligar câmera/microfone nos intervalos. Retomar câmera volta a preparar o histórico.
 
-## Histórico e privacidade
+## Histórico limitado: não acumula horas sem ação
 
-O histórico anterior de 15, 30 ou 60 segundos continua em fragmentos privados de aproximadamente 4 segundos. Há pequenas lacunas entre fragmentos e a seleção anterior é aproximada. Ao encerrar, os fragmentos são unidos e o MP4 é publicado em `Movies/VoltaDoLance` usando MediaStore/IS_PENDING. Temporários são removidos após exportação ou descarte normal. Fragmentos de um processo interrompido podem permanecer no cache até sua limpeza pelo Android.
+O histórico mantém uma janela deslizante de 15, 30 ou 60 segundos, começando em um quadro-chave próximo ao limite. GOPs antigos são apagados continuamente. Abrir às 8h e marcar às 14h não deixa seis horas de vídeo no cache: ficam apenas os segundos mais recentes, mais a pequena margem de um quadro-chave. Bytes codificados ficam em arquivos privados com limite por espaço; não é vídeo bruto na RAM.
 
-A captura funciona com esta tela aberta. Ao sair ou bloquear, um evento marcado é encerrado com tentativa de salvamento; o histórico sem marcação é descartado. O modo de prévia preta mantém o indicador visível e não bloqueia o aparelho. A exportação continua durante a pausa da atividade, mas encerramento forçado do processo pode perder o evento. Não há restauração automática de vídeos após falhas do processo.
+Ao marcar, a parte recente fica protegida e o arquivo temporário passa a crescer com o lance até encerrar. Depois é exportado em `Movies/VoltaDoLance` via MediaStore/IS_PENDING e os temporários são removidos. Histórico não marcado é descartado ao pausar/sair. Arquivos de uma sessão interrompida são limpos no próximo processo antes de uma nova captura.
 
-Voz é experimental, opcional e exclusivamente no dispositivo (Android 12+ com mecanismo local disponível). Alguns aparelhos não compartilham o microfone entre reconhecimento e gravação. Falhas repetidas desativam a voz; os botões continuam disponíveis. Segurança de espaço/bateria/calor reduz riscos, sem garantir salvamento diante de falha de hardware ou desligamento.
+O app reserva espaço para montagem e cópia final, com margem para novos frames. Pouco espaço, bateria em 5% fora do carregador ou aquecimento elevado pausam a captura com aviso; num lance marcado, haverá tentativa de salvamento dos dados íntegros. Durações após marcar: 3, 10, 20, 30, 60 minutos ou sem limite fixo, sempre sujeitas aos recursos disponíveis.
 
-## APK pelo GitHub Actions
+**Histórico ativo consome bateria:** câmera, codificador e microfone continuam trabalhando. Use Pausar histórico nos intervalos. Manter apenas alguns segundos em disco controla armazenamento, não elimina o gasto de energia. A captura funciona com a tela do app aberta; ocultar a prévia não bloqueia o aparelho. Encerramento forçado do processo/desligamento pode perder o lance; não há recuperação garantida.
 
-Acesse [Actions](https://github.com/TawanGMenezes/VoltaDoLance/actions), escolha a execução mais recente bem-sucedida da branch `main`, e baixe **VoltaDoLance-debug-apk** em **Artifacts** (requer login no GitHub). Extraia `app-debug.apk` do ZIP e abra no celular.
+## Qualidade e voz
 
-O workflow executa todos os testes JVM/Robolectric, monta o APK debug, verifica assinatura e versão e testa instalação limpa, reinstalação e abertura em um emulador Android 15. Após aprovação na main, publica também o arquivo APK diretamente em Releases (pré-lançamento), para baixar sem extrair ZIP. Relatórios ficam no artefato **VoltaDoLance-test-results**. Ferramentas usadas: Java 17, Gradle 8.13, SDK/build-tools 36, AGP 8.12.2. Versão do app: `0.2.1-alpha`, código `3`, pacote `br.com.voltadolance.dev`.
+Camera2 informa tamanhos/fps de MediaCodec e prévia, faixas AE, tempos de frame e suporte AVC. Modos como 4K30/1080p60 são oferecidos somente quando reportados; uma configuração rejeitada tenta modo inferior antes de marcar. Não se promete 4K60 nem taxa constante em qualquer luz/aparelho.
 
-A assinatura debug é de testes e o Actions conserva a chave de teste no cache entre builds enquanto esse cache estiver disponível. Se o Android recusar atualização por assinatura diferente, faça cópia dos vídeos antes de remover a versão antiga. Não use este build para distribuição comercial.
+O reconhecedor é local e o modelo português tem tamanho fixo no APK/armazenamento privado; ele não cresce com horas de uso. Ruído, vento, distância, pronúncia e palavras fora do vocabulário ainda afetam a voz. Confira o estado “ouvindo” e a frase ouvida na tela; botões continuam disponíveis. O app não envia áudio para serviços externos.
 
-## Validação em aparelho ainda necessária
+## APK e validação
 
-Os testes automatizados cobrem estados/controles/REC, correspondência de voz, persistência de frases, janela anterior e regras de segurança. Eles não substituem gravação no OPPO Reno14 F.
+Use [Releases](https://github.com/TawanGMenezes/VoltaDoLance/releases) para baixar o `.apk` diretamente. O Actions da main publica uma pré-versão somente após testes JVM/UI, assinatura/alinhamento, instalação/reinstalação e teste Android com Camera2/AVC/AAC e fala sintética em português.
 
-1. Primeiro grave em 720p, aguarde 20 segundos de histórico, marque e encerre por botão; reproduza o MP4 com áudio e orientação corretos.
-2. Repita com frases personalizadas, verificando se há reconhecimento enquanto grava áudio.
-3. Teste os modos informados (especialmente 4K30 e 1080p60), confirme qualidade e fluidez do arquivo e mensagens de fallback.
-4. Confira REC, cronômetro, botões desabilitados no salvamento e miniatura na galeria. Repita dez eventos.
-5. Marque e encerre imediatamente; depois teste saída da tela durante gravação e exportação. Confirme o vídeo salvo ao retornar.
-6. Valide uma gravação longa com espaço disponível, encerramento manual no modo sem limite e estabilidade térmica. O limite configurado conta o tempo após marcar, além do histórico selecionado.
+Versão `0.3.0-alpha`, código `4`, pacote `br.com.voltadolance.dev`. Java 17, Gradle 8.13, SDK36, AGP8.12.2. Assinatura debug preservada no cache enquanto disponível; não é distribuição comercial. Modelo português Vosk small pt0.3 e Vosk API: Apache2; JNA distribuído sob Apache2. Atribuições/licenças incluídas no APK.
+
+Ainda é necessário testar no OPPO real: comandos com a própria voz e frases escolhidas; vento/ruído; bips e volume; orientação e áudio; fluidez nos modos oferecidos; eventos longos, pausas/retomadas e espaço disponível. Testes de emulador não garantem funcionamento em todos os aparelhos.

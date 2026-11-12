@@ -7,8 +7,8 @@ android {
         applicationId 'br.com.voltadolance.dev'
         minSdk 29
         targetSdk 36
-        versionCode 3
-        versionName '0.2.1-alpha'
+        versionCode 4
+        versionName '0.3.0-alpha'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildTypes {
@@ -26,6 +26,43 @@ android {
 }
 
 dependencies {
+    implementation 'com.alphacephei:vosk-android:0.3.75@aar'
+    implementation 'net.java.dev.jna:jna:5.16.0@aar'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.16'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
+
+// Bundle the pinned Portuguese model at build time. The app never downloads audio/models.
+def modelAssets = layout.buildDirectory.dir('generated/voiceAssets')
+android.sourceSets.main.assets.srcDir(modelAssets)
+tasks.register('preparePortugueseModel') {
+    def archive = rootProject.layout.projectDirectory.file('.models/vosk-model-small-pt-0.3.zip')
+    inputs.property('sha256', '6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7')
+    outputs.dir(modelAssets)
+    doLast {
+        def file = archive.asFile
+        if (!file.exists()) {
+            file.parentFile.mkdirs()
+            def connection = new URL('https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip').openConnection()
+            connection.connectTimeout = 30000
+            connection.readTimeout = 120000
+            connection.inputStream.withCloseable { input -> file.withOutputStream { output -> output << input } }
+        }
+        def sha = java.security.MessageDigest.getInstance('SHA-256')
+        file.withInputStream { input -> byte[] block = new byte[65536]; int n; while ((n = input.read(block)) != -1) sha.update(block, 0, n) }
+        if (sha.digest().encodeHex().toString() != '6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7') {
+            file.delete()
+            throw new GradleException('Portuguese model checksum mismatch; retry build')
+        }
+        copy {
+            from zipTree(file)
+            into modelAssets
+            eachFile { details -> details.path = details.path.replaceFirst('vosk-model-small-pt-0.3/', 'model-pt/') }
+            includeEmptyDirs = false
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'preparePortugueseModel' }

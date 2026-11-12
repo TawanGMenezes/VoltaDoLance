@@ -18,4 +18,13 @@ public class VoiceCommandsTest {
   for(String[] p:new String[][]{{"!!!","fim"},{"vídeo","VIDEO"},{"a".repeat(81),"fim"},{null,"fim"}})
    assertThrows(IllegalArgumentException.class,()->new VoiceCommands(p[0],p[1]));
  }
-}
+ @Test public void encerrarAlwaysFinishesAndCannotBeStartPhrase() {
+  VoiceCommands c=new VoiceCommands("gravar","pode salvar");
+  assertEquals(VoiceCommands.Command.FINISH,c.match("agora encerrar e salvar"));
+  assertEquals(VoiceCommands.Command.NONE,c.match("encerraram"));
+  assertThrows(IllegalArgumentException.class,()->new VoiceCommands("agora encerrar","fim"));
+ }
+ @Test public void grammarPreservesAccentsAndIncludesStopAliasAndUnknown() {
+  VoiceCommands c=new VoiceCommands("AÇÃO já!","Encerrar vídeo");
+  assertArrayEquals(new String[]{"ação já","encerrar vídeo","encerrar","[unk]"},c.grammarPhrases());
+ }}

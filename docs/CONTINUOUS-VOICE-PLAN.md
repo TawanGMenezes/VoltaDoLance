@@ -14,6 +14,8 @@ Use one uninterrupted Camera2 session targeting a MediaCodec AVC surface, and on
 
 ## Validation
 
+Additional user requirements: keep history mode, never accumulate hours of unmarked video; evict by time and hard disk bound, stop with free-space reserve and visible warning. Expose pause-history control for battery conservation. One short audible cue on accepted mark and two on accepted finish, shared by button/voice and no duplicate cues for repeated refreshes.
+
 1. Unit regressions for packet history keyframe cutoff, original timestamps across many GOPs, eviction/pinning, voice boundaries/custom phrases and duplicate partial/final commands.
 2. Observe RED before implementation, then full JVM/UI suite GREEN in Actions.
 3. Emulator instrumentation with actual Camera2/AVC/AAC records across multiple old four-second boundaries; inspect MP4 timestamps/gaps and tracks. Exercise actual bundled Portuguese recognizer with PCM speech fixtures and REC/save UI callbacks. Install/reinstall/launch and native library alignment checks.

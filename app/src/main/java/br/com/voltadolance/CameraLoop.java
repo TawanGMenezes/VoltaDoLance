@@ -3,62 +3,51 @@ package br.com.voltadolance;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
+import android.content.*;
 import android.content.pm.PackageManager;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.*;
-import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.*;
 import android.view.Surface;
 import android.view.TextureView;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
-/** Private ~4s fragments preserve the approximate pre-record window. */
+/** One camera session and encoder lifetime for rolling history and a marked event. */
 public final class CameraLoop {
     public interface Listener {
         void onStatus(String message);
         void onSaved(Uri uri);
         void onError(String error);
+        default void onPcm(byte[] pcm,int length) { }
     }
-    private static final long SEGMENT_MS=4000;
     private final Activity activity;
     private final TextureView preview;
     private final Listener listener;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final ExecutorService io=Executors.newSingleThreadExecutor();
-    private final RollingWindow<File> rolling=new RollingWindow<>();
     private final CaptureState state=new CaptureState();
     private CameraDevice camera;
     private CameraCaptureSession session;
-    private MediaRecorder recorder;
-    private File currentFile;
-    private long startedAtMs,captureAtMs;
-    private int pastSeconds=15,cameraOrientation=90;
+    private Surface previewSurface;
+    private ContinuousRecorder recorder;
+    private int pastSeconds=15,orientation=90,generation,modeIndex;
     private long maxEventMs=600000;
-    private boolean running,recording,closing,activityActive=true,safetyPaused,disposed;
-    private int generation,segmentGeneration;
-    private String requestedMode="1280x720@30";
+    private boolean running,closing,activityActive=true,safetyPaused,manualPaused,disposed;
+    private String requestedMode="1280x720@30",cameraId,safetyNotice="";
     private List<CameraModes.Mode> modes=Collections.emptyList();
-    private int modeIndex;
-    private String safetyNotice="";
 
     public CameraLoop(Activity activity,TextureView preview,Listener listener) {
         this.activity=activity; this.preview=preview; this.listener=listener;
     }
     public CaptureState state() { return state; }
-    public void setPastSeconds(int seconds) { pastSeconds=seconds; }
+    public void setPastSeconds(int seconds) { pastSeconds=seconds; if(recorder!=null) recorder.setPastSeconds(seconds); }
     public void setMode(String key) { requestedMode=key; }
     public void setPostMinutes(int minutes) {
         if(!Arrays.asList(0,3,10,20,30,60).contains(minutes)) throw new IllegalArgumentException("Duração inválida");
-        maxEventMs=minutes*60_000L;
+        maxEventMs=minutes*60000L;
     }
     public boolean isCapturing() { return state.isRecording() || state.isSaving(); }
     public boolean isRunning() { return running; }
@@ -66,11 +55,10 @@ public final class CameraLoop {
     public String modeLabel() { return modes.isEmpty()?"Detectando câmera":modes.get(modeIndex).label(); }
     private void status(String text) { listener.onStatus(text); }
 
-    @SuppressLint("MissingPermission")
     public void start() {
-        if(running || closing || state.isSaving() || !activityActive || safetyPaused || disposed) return;
-        if(activity.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED
-                || activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
+        if(running || closing || isCapturing() || !activityActive || safetyPaused || manualPaused || disposed) return;
+        if(activity.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED ||
+                activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
             error("Autorize câmera e microfone para começar"); return;
         }
         if(!preview.isAvailable()) {
@@ -84,105 +72,112 @@ public final class CameraLoop {
         }
         try {
             String unsafe=unsafeReason();
-            if(unsafe!=null) { safetyPaused=true; error(unsafe+" • captura pausada"); return; }
+            if(unsafe!=null) { safetyPaused=true; error(unsafe+" • histórico pausado"); return; }
             CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
-            String id=CameraModes.backCamera(manager);
-            CameraCharacteristics cc=manager.getCameraCharacteristics(id);
-            Integer orientation=cc.get(CameraCharacteristics.SENSOR_ORIENTATION);
-            if(orientation!=null) cameraOrientation=orientation;
+            cameraId=CameraModes.backCamera(manager);
+            CameraCharacteristics cc=manager.getCameraCharacteristics(cameraId);
+            Integer angle=cc.get(CameraCharacteristics.SENSOR_ORIENTATION); if(angle!=null) orientation=angle;
             modes=CameraModes.detect(cc);
-            if(modes.isEmpty()) throw new IllegalStateException("Nenhum modo de vídeo compatível informado");
+            if(modes.isEmpty()) throw new IllegalStateException("Nenhum modo compatível informado");
             modeIndex=modes.size()-1;
             for(int i=0;i<modes.size();i++) if(modes.get(i).key().equals(requestedMode)) modeIndex=i;
-            running=true; closing=false; state.preparing();
-            final int token=++generation;
-            status("Inicializando a captura…");
-            manager.openCamera(id,new CameraDevice.StateCallback() {
-                public void onOpened(CameraDevice device) {
-                    if(token!=generation || !running || !activityActive) { device.close(); return; }
-                    camera=device; newSegment();
-                }
-                public void onDisconnected(CameraDevice device) {
-                    device.close(); if(token==generation && !closing && !state.isSaving()) fail("Câmera desconectada",null);
-                }
-                public void onError(CameraDevice device,int code) {
-                    device.close(); if(token==generation && !closing && !state.isSaving()) fail("Falha na câmera ("+code+")",null);
-                }
-            },main);
-        } catch(Exception e) { fail("Não foi possível abrir a câmera",e); }
+            running=true; state.preparing(); status("Preparando histórico contínuo…");
+            prepareMode(++generation);
+        } catch(Exception e) { fail("Não foi possível abrir a câmera: "+e.getMessage()); }
     }
-    private void newSegment() {
-        if(!running || closing || camera==null || !activityActive) return;
-        state.preparing();
-        final int token=++segmentGeneration;
+    private boolean current(int token) { return token==generation && running && !closing && activityActive && !disposed; }
+    private void prepareMode(final int token) {
         final CameraModes.Mode mode=modes.get(modeIndex);
-        try {
-            File dir=new File(activity.getCacheDir(),"rolling");
-            if(!dir.isDirectory() && !dir.mkdirs()) throw new IllegalStateException("Sem espaço temporário");
-            currentFile=File.createTempFile("chunk_",".mp4",dir);
-            final MediaRecorder segmentRecorder=new MediaRecorder(); recorder=segmentRecorder;
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            recorder.setVideoSize(mode.width,mode.height); recorder.setVideoFrameRate(mode.fps);
-            recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-            recorder.setVideoEncodingBitRate(mode.bitrate()); recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-            recorder.setAudioSamplingRate(44100); recorder.setAudioEncodingBitRate(96000);
-            recorder.setAudioChannels(1); recorder.setOrientationHint(cameraOrientation);
-            recorder.setOutputFile(currentFile.getAbsolutePath()); recorder.prepare();
-            SurfaceTexture texture=preview.getSurfaceTexture();
-            if(texture==null) throw new IllegalStateException("Prévia indisponível");
-            texture.setDefaultBufferSize(mode.width,mode.height);
-            final Surface viewSurface=new Surface(texture);
-            Surface recordSurface=recorder.getSurface();
-            CaptureRequest.Builder request=camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-            request.addTarget(viewSurface); request.addTarget(recordSurface);
-            request.set(CaptureRequest.CONTROL_MODE,CaptureRequest.CONTROL_MODE_AUTO);
-            request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,mode.aeRange);
-            camera.createCaptureSession(Arrays.asList(viewSurface,recordSurface),new CameraCaptureSession.StateCallback() {
-                public void onConfigured(CameraCaptureSession configured) {
-                    if(token!=segmentGeneration || !running || closing || !activityActive) {
-                        configured.close(); viewSurface.release(); return;
+        io.execute(()->{
+            try {
+                ContinuousRecorder prepared=new ContinuousRecorder(activity,mode,orientation,pastSeconds,new ContinuousRecorder.Listener() {
+                    public void onPcm(byte[] pcm,int length) { listener.onPcm(pcm,length); }
+                    public void onReady() {
+                        main.post(()->{ if(current(token)) { state.ready(); status("Histórico ativo • "+mode.label()+" • até "+pastSeconds+" s"); } });
                     }
-                    session=configured;
+                    public void onError(String message) { main.post(()->{ if(current(token)) fail(message); }); }
+                });
+                main.post(()->{
+                    if(!current(token)) { discardLater(prepared); return; }
+                    recorder=prepared; openCamera(token,mode,prepared);
+                });
+            } catch(Exception e) { main.post(()->{ if(current(token)) retryMode("Modo indisponível: "+e.getMessage()); }); }
+        });
+    }
+    @SuppressLint("MissingPermission")
+    private void openCamera(final int token,CameraModes.Mode mode,ContinuousRecorder owner) {
+        try {
+            CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
+            manager.openCamera(cameraId,new CameraDevice.StateCallback() {
+                public void onOpened(CameraDevice device) {
+                    if(!current(token)) { device.close(); return; }
+                    camera=device;
                     try {
-                        configured.setRepeatingRequest(request.build(),null,main);
-                        segmentRecorder.start(); recording=true; startedAtMs=SystemClock.elapsedRealtime();
-                        state.ready(); status(state.isRecording()?"Gravando o momento…":
-                                "Pronto • memória recente ativa • "+mode.label());
-                        main.postDelayed(segmentTick,SEGMENT_MS);
-                        main.removeCallbacks(safetyTick); main.postDelayed(safetyTick,1000);
-                    } catch(Exception e) { modeFailed("Não foi possível iniciar o vídeo",e); }
+                        SurfaceTexture texture=preview.getSurfaceTexture();
+                        if(texture==null) throw new IllegalStateException("Prévia indisponível");
+                        texture.setDefaultBufferSize(mode.width,mode.height);
+                        final Surface view=new Surface(texture); previewSurface=view;
+                        CaptureRequest.Builder request=device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                        request.addTarget(view); request.addTarget(owner.inputSurface());
+                        request.set(CaptureRequest.CONTROL_MODE,CaptureRequest.CONTROL_MODE_AUTO);
+                        request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,mode.aeRange);
+                        device.createCaptureSession(Arrays.asList(view,owner.inputSurface()),new CameraCaptureSession.StateCallback() {
+                            public void onConfigured(CameraCaptureSession configured) {
+                                if(!current(token)) { configured.close(); return; }
+                                session=configured;
+                                try {
+                                    configured.setRepeatingRequest(request.build(),null,main);
+                                    owner.start(); main.postDelayed(safetyTick,1000);
+                                } catch(Exception e) { retryMode("Não foi possível iniciar captura: "+e.getMessage()); }
+                            }
+                            public void onConfigureFailed(CameraCaptureSession configured) {
+                                configured.close(); if(current(token)) retryMode("Modo rejeitado pela câmera");
+                            }
+                        },main);
+                    } catch(Exception e) { retryMode("Falha ao preparar câmera: "+e.getMessage()); }
                 }
-                public void onConfigureFailed(CameraCaptureSession configured) {
-                    configured.close(); viewSurface.release();
-                    if(token==segmentGeneration && !closing) modeFailed("Modo rejeitado pelo aparelho",null);
-                }
-                public void onClosed(CameraCaptureSession closed) { viewSurface.release(); }
+                public void onDisconnected(CameraDevice device) { device.close(); if(current(token)) fail("Câmera desconectada"); }
+                public void onError(CameraDevice device,int code) { device.close(); if(current(token)) fail("Erro na câmera ("+code+")"); }
             },main);
-        } catch(Exception e) { modeFailed("Falha ao configurar vídeo",e); }
+        } catch(Exception e) { retryMode("Falha ao abrir câmera: "+e.getMessage()); }
     }
-    private void modeFailed(String reason,Exception error) {
-        if(state.isRecording()) { safetyNotice=reason; safetyPaused=true; finishAndSave(); return; }
-        finishSegment();
-        for(File file:rolling.clear()) file.delete();
-        if(modeIndex+1<modes.size() && running && activityActive) {
-            modeIndex++; status(reason+" • tentando "+modeLabel()); newSegment();
-        } else fail(reason,error);
+    private void retryMode(String reason) {
+        if(state.isRecording()) { fail(reason); return; }
+        closeCamera(); main.removeCallbacks(safetyTick);
+        ContinuousRecorder old=recorder; recorder=null; if(old!=null) io.execute(old::discard);
+        if(++modeIndex<modes.size() && activityActive && !disposed) {
+            state.preparing(); status(reason+" • tentando "+modeLabel()); prepareMode(++generation);
+        } else fail(reason);
     }
-    private final Runnable segmentTick=() -> {
-        if(!running || closing) return;
-        finishSegment();
-        if(running && !closing) newSegment();
-    };
+    public void markMoment() {
+        if(!running || closing || !state.canMark() || recorder==null) return;
+        if(!recorder.mark(pastSeconds)) { status("Aguarde o histórico ficar pronto"); return; }
+        if(!state.mark(SystemClock.elapsedRealtime())) return;
+        safetyNotice=""; status("REC • momento marcado • diga sua frase para encerrar");
+    }
+    public void finishAndSave() {
+        if(!state.beginSaving()) return;
+        closing=true; generation++; main.removeCallbacks(safetyTick);
+        status("Salvando vídeo…"+(safetyNotice.isEmpty()?"":" • "+safetyNotice));
+        closeCamera(); final ContinuousRecorder owner=recorder; recorder=null;
+        io.execute(()->{
+            File output=null;
+            try {
+                if(owner==null) throw new IllegalStateException("Captura indisponível");
+                output=File.createTempFile("lance_",".mp4",activity.getCacheDir());
+                owner.finish(output); Uri uri=VideoStore.save(activity,output);
+                main.post(()->{ closing=false; running=false; state.saved(); listener.onSaved(uri); if(activityActive && !disposed && !safetyPaused && !manualPaused) start(); });
+            } catch(Exception e) { main.post(()->{ closing=false; running=false; error("Falha ao salvar: "+e.getMessage()); }); }
+            finally { if(owner!=null) owner.discard(); if(output!=null) output.delete(); }
+        });
+    }
     private final Runnable safetyTick=new Runnable() {
         public void run() {
-            if(!running || closing) return;
+            if(!running || closing || !activityActive) return;
             String reason=unsafeReason();
             if(reason!=null) {
                 safetyNotice=reason; safetyPaused=true;
-                if(state.isRecording()) finishAndSave();
-                else { stopBuffer(); error(reason+" • captura pausada"); }
+                if(state.isRecording()) finishAndSave(); else { stopBuffer(); error(reason+" • histórico pausado"); }
                 return;
             }
             if(state.isRecording() && CaptureSafety.durationReached(maxEventMs,state.elapsed(SystemClock.elapsedRealtime()))) {
@@ -192,101 +187,43 @@ public final class CameraLoop {
         }
     };
     private String unsafeReason() {
-        long bytes=0;
-        for(RollingWindow.Entry<File> entry:rolling.from(Long.MIN_VALUE)) bytes+=entry.value.length();
-        if(currentFile!=null) bytes+=currentFile.length();
-        long segmentBytes=modes.isEmpty()?4_000_000:(modes.get(modeIndex).bitrate()/8L+12000)*4;
+        long bytes=recorder==null?0:recorder.bytesOnDisk();
+        long futureBytes=modes.isEmpty()?4_000_000:(modes.get(modeIndex).bitrate()/8L+12000)*4;
         long free=Math.min(activity.getCacheDir().getUsableSpace(),Environment.getExternalStorageDirectory().getUsableSpace());
-        if(CaptureSafety.lowSpace(free,bytes,segmentBytes)) return "Pouco espaço para salvar com segurança";
+        if(CaptureSafety.lowSpace(free,bytes,futureBytes)) return "Pouco espaço livre para salvar o lance";
         Intent battery=activity.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if(battery!=null) {
             int level=battery.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),scale=battery.getIntExtra(BatteryManager.EXTRA_SCALE,100);
-            boolean charging=battery.getIntExtra(BatteryManager.EXTRA_PLUGGED,0)!=0;
-            if(CaptureSafety.lowBattery(scale>0 && level>=0?level*100/scale:-1,charging)) return "Bateria em 5% ou menos";
+            if(CaptureSafety.lowBattery(level>=0 && scale>0?level*100/scale:-1,battery.getIntExtra(BatteryManager.EXTRA_PLUGGED,0)!=0)) return "Bateria em 5% ou menos";
         }
         PowerManager power=(PowerManager)activity.getSystemService(Context.POWER_SERVICE);
         if(power!=null && power.getCurrentThermalStatus()>=PowerManager.THERMAL_STATUS_SEVERE) return "Aparelho muito quente";
         return null;
     }
-    private void finishSegment() {
-        main.removeCallbacks(segmentTick); ++segmentGeneration;
-        if(session!=null) {
-            try { session.stopRepeating(); } catch(Exception ignored) { }
-            session.close(); session=null;
-        }
-        boolean valid=recording; long end=SystemClock.elapsedRealtime();
-        if(recorder!=null) {
-            try { if(recording) recorder.stop(); } catch(RuntimeException e) { valid=false; }
-            try { recorder.reset(); } catch(Exception ignored) { }
-            recorder.release(); recorder=null;
-        }
-        recording=false;
-        if(currentFile!=null) {
-            if(valid && currentFile.length()>1024) {
-                rolling.add(currentFile,startedAtMs,end);
-                if(!isCapturing()) for(File old:rolling.purgeOlderThan(end-pastSeconds*1000L-SEGMENT_MS*2)) old.delete();
-            } else currentFile.delete();
-        }
-        currentFile=null;
-    }
-    public void markMoment() {
-        if(!running || closing || !recording || !state.mark(SystemClock.elapsedRealtime())) return;
-        captureAtMs=SystemClock.elapsedRealtime(); safetyNotice="";
-        status("Momento marcado • toque em encerrar ou use sua frase de voz");
-    }
-    public void finishAndSave() {
-        if(!state.beginSaving()) return;
-        closing=true; main.removeCallbacks(safetyTick); main.removeCallbacks(segmentTick);
-        status("Salvando vídeo…"+(safetyNotice.isEmpty()?"":" • "+safetyNotice));
-        long wait=recording?Math.max(0,800-(SystemClock.elapsedRealtime()-startedAtMs)):0;
-        main.postDelayed(this::exportMoment,wait);
-    }
-    private void exportMoment() {
-        finishSegment(); closeCamera();
-        List<File> selected=new ArrayList<>();
-        for(RollingWindow.Entry<File> item:rolling.from(captureAtMs-pastSeconds*1000L)) selected.add(item.value);
-        List<File> all=rolling.clear();
-        File dir=new File(activity.getCacheDir(),"exports"); List<File> stable=new ArrayList<>();
-        try {
-            if(!dir.isDirectory() && !dir.mkdirs()) throw new IllegalStateException("Sem espaço para exportar");
-            for(File file:selected) {
-                File target=File.createTempFile("pending_",".mp4",dir);
-                Files.move(file.toPath(),target.toPath(),StandardCopyOption.REPLACE_EXISTING); stable.add(target);
-            }
-        } catch(Exception e) {
-            for(File file:stable) file.delete(); for(File file:all) file.delete();
-            error("Falha ao proteger vídeo: "+e.getMessage()); if(disposed) io.shutdown(); return;
-        }
-        for(File file:all) file.delete();
-        final int orientation=cameraOrientation;
-        io.execute(() -> {
-            File merged=null;
-            try {
-                if(stable.isEmpty()) throw new IllegalStateException("Nenhum segmento íntegro; aguarde o histórico ficar pronto");
-                merged=File.createTempFile("moment_",".mp4",activity.getCacheDir());
-                Mp4Joiner.join(stable,merged,orientation);
-                Uri uri=VideoStore.save(activity,merged);
-                main.post(() -> { state.saved(); listener.onSaved(uri); if(activityActive && !safetyPaused) start(); });
-            } catch(Exception e) { main.post(() -> error("Falha ao salvar: "+e.getMessage())); }
-            finally { for(File file:stable) file.delete(); if(merged!=null) merged.delete(); if(disposed) io.shutdown(); }
-        });
-    }
     private void closeCamera() {
-        running=false; generation++;
-        if(session!=null) { session.close(); session=null; }
+        if(session!=null) { try { session.stopRepeating(); } catch(Exception ignored) { } session.close(); session=null; }
         if(camera!=null) { camera.close(); camera=null; }
-        closing=false;
-    }
-    private void error(String message) { state.error(); listener.onError(message); }
-    private void fail(String message,Exception e) {
-        if(state.isRecording()) { safetyPaused=true; safetyNotice=message; finishAndSave(); return; }
-        stopBuffer(); error(message+(e==null?"":": "+e.getMessage()));
+        if(previewSurface!=null) { previewSurface.release(); previewSurface=null; }
     }
     private void stopBuffer() {
-        closing=true; main.removeCallbacks(segmentTick); main.removeCallbacks(safetyTick);
-        finishSegment(); closeCamera();
-        for(File file:rolling.clear()) file.delete();
+        generation++; running=false; main.removeCallbacks(safetyTick); closeCamera();
+        ContinuousRecorder old=recorder; recorder=null;
+        if(old!=null) discardLater(old);
     }
+    private void discardLater(ContinuousRecorder old) {
+        if(!io.isShutdown()) { io.execute(old::discard); return; }
+        Thread cleanup=new Thread(old::discard,"capture-cleanup"); cleanup.setDaemon(true); cleanup.start();
+    }
+    private void error(String message) { state.error(); listener.onError(message); }
+    private void fail(String message) {
+        if(state.isRecording()) { safetyPaused=true; safetyNotice=message; finishAndSave(); return; }
+        stopBuffer(); error(message);
+    }
+    public void pauseHistory() {
+        if(isCapturing()) return;
+        manualPaused=true; stopBuffer(); state.stopped(); status("Histórico pausado • câmera e microfone desligados");
+    }
+    public void resumeCapture() { manualPaused=false; safetyPaused=false; activityActive=true; start(); }
     public void shutdown() {
         activityActive=false;
         if(state.isRecording()) { finishAndSave(); return; }
@@ -294,5 +231,5 @@ public final class CameraLoop {
         stopBuffer(); state.stopped();
     }
     public void resumeActivity() { activityActive=true; safetyPaused=false; }
-    public void release() { disposed=true; if(!state.isSaving()) io.shutdown(); }
+    public void release() { disposed=true; io.shutdown(); }
 }

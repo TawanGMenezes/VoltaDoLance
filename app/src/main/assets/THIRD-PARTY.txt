@@ -1,0 +1,5 @@
+Offline Portuguese speech recognition: Vosk API 0.3.75 (Alpha Cephei), Apache License 2.0.
+Bundled model: vosk-model-small-pt-0.3, Apache License 2.0, https://alphacephei.com/vosk/models
+Model archive SHA-256: 6e1ce909032e1afa7a88e68a3d628ecafff302bdf195befab308826c395e93b7
+JNA 5.16.0 (Java Native Access): Apache License 2.0 or LGPL 2.1; distributed here under Apache License 2.0. https://github.com/java-native-access/jna
+The application does not send audio to external services or request INTERNET permission.

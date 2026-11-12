@@ -14,6 +14,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.media.ToneGenerator;
+import android.media.AudioManager;
 import android.hardware.camera2.CameraManager;
 import android.widget.EditText;
 import java.util.List;
@@ -36,7 +38,7 @@ public final class MainActivity extends Activity {
     private static final int ACCENT = 0xFFFFB765;
     private static final int PERMISSIONS = 82;
     private CameraLoop cameraLoop;
-    private OnDeviceVoice voice;
+    private volatile OnDeviceVoice voice;
     private TextureView preview;
     private TextView subtitle;
     private TextView stateLabel;
@@ -48,6 +50,11 @@ public final class MainActivity extends Activity {
     private TextView recDot;
     private TextView historyHint;
     private TextView savedNotice;
+    private TextView voiceLabel;
+    private Button pauseButton;
+    private ToneGenerator tones;
+    private CaptureState.Phase lastSoundPhase = CaptureState.Phase.PREPARING;
+    private String voiceStatus = "Voz desligada";
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private final Runnable uiTick = new Runnable() {
         @Override public void run() { refreshButtons(); uiHandler.postDelayed(this, 250); }
@@ -92,6 +99,7 @@ public final class MainActivity extends Activity {
         stopPhrase = preferences.getString("stop_phrase", "Encerrar vídeo");
         useVoice = preferences.getBoolean("voice", false);
         buildUi();
+        try { tones = new ToneGenerator(AudioManager.STREAM_MUSIC, 75); } catch (RuntimeException ignored) { }
         cameraLoop = new CameraLoop(this, preview, new CameraLoop.Listener() {
             @Override public void onStatus(String message) {
                 stateLabel.setText(message);
@@ -111,6 +119,10 @@ public final class MainActivity extends Activity {
                 Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
                 refreshButtons();
             }
+            @Override public void onPcm(byte[] pcm, int length) {
+                OnDeviceVoice current = voice;
+                if (current != null) current.onPcm(pcm, length);
+            }
         });
         cameraLoop.setPastSeconds(past);
         cameraLoop.setMode(modeKey);
@@ -119,9 +131,10 @@ public final class MainActivity extends Activity {
             @Override public void onMark() { cameraLoop.markMoment(); refreshButtons(); }
             @Override public void onFinish() { cameraLoop.finishAndSave(); refreshButtons(); }
             @Override public void onUnavailable() {
-                useVoice = false; preferences.edit().putBoolean("voice", false).apply();
-                subtitle.setText("Comandos locais indisponíveis • use o botão");
-                Toast.makeText(MainActivity.this, "Voz local indisponível neste aparelho ou com o microfone em uso. Use os botões.", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "A voz está tentando se recuperar. Confira o estado da escuta na tela; os botões continuam disponíveis.", Toast.LENGTH_LONG).show();
+            }
+            @Override public void onState(String status) {
+                voiceStatus = status; updateVoiceSubtitle();
             }
         });
         voice.setPhrases(startPhrase, stopPhrase);
@@ -163,6 +176,8 @@ public final class MainActivity extends Activity {
                 12, 0xFFC6D7DF, false);
         hint.setId(View.generateViewId()); bottom.addView(hint);
         historyHint = hint;
+        voiceLabel = text("Voz desligada", 12, 0xFFC6D7DF, false);
+        bottom.addView(voiceLabel);
         recordButton = button("GUARDAR MOMENTO", ACCENT, BACKGROUND);
         recordButton.setId(R.id.mark_moment);
         LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1, dp(62));
@@ -170,7 +185,8 @@ public final class MainActivity extends Activity {
         recordButton.setOnClickListener(v -> {
             CaptureState.Phase phase = cameraLoop.state().phase();
             if (phase == CaptureState.Phase.ERROR || phase == CaptureState.Phase.STOPPED || phase == CaptureState.Phase.SAVED) {
-                cameraLoop.resumeActivity(); cameraLoop.start();
+                cameraLoop.resumeCapture();
+                if (useVoice && cameraLoop.isRunning()) voice.enable();
             } else cameraLoop.markMoment();
             refreshButtons();
         });
@@ -183,6 +199,15 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams darkLp = new LinearLayout.LayoutParams(-1, dp(48));
         darkLp.topMargin = dp(10); bottom.addView(dark, darkLp);
         dark.setOnClickListener(v -> toggleShade());
+        pauseButton = button("Pausar histórico • desligar câmera", 0xFF132B3A, WHITE);
+        LinearLayout.LayoutParams pauseLp = new LinearLayout.LayoutParams(-1, dp(44));
+        pauseLp.topMargin = dp(8); bottom.addView(pauseButton, pauseLp);
+        pauseButton.setOnClickListener(v -> {
+            if (cameraLoop == null || cameraLoop.isCapturing()) return;
+            if (voice != null) voice.disable();
+            voiceStatus = "Voz pausada junto com a câmera"; updateVoiceSubtitle();
+            cameraLoop.pauseHistory(); refreshButtons();
+        });
         TextView originalNotice = text("Prévia ativa enquanto esta tela estiver aberta.",
                 11, 0xFF9BB0BC, false); originalNotice.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams legalLp = new LinearLayout.LayoutParams(-1, -2);
@@ -219,6 +244,18 @@ public final class MainActivity extends Activity {
     private void refreshButtons() {
         if (cameraLoop == null || recordButton == null) return;
         CaptureState state = cameraLoop.state();
+        if (useVoice && voiceLabel != null) {
+            voiceLabel.setText(state.isSaving() ? "Voz aguardando o salvamento" :
+                    state.phase() == CaptureState.Phase.STOPPED ? "Voz pausada junto com a câmera" : voiceStatus);
+        }
+        CaptureCues.Cue cue = CaptureCues.between(lastSoundPhase, state.phase());
+        lastSoundPhase = state.phase();
+        if (tones != null) {
+            try {
+                if (cue == CaptureCues.Cue.START) tones.startTone(ToneGenerator.TONE_PROP_BEEP, 140);
+                else if (cue == CaptureCues.Cue.STOP) tones.startTone(ToneGenerator.TONE_PROP_BEEP2, 250);
+            } catch (RuntimeException ignored) { }
+        }
         boolean active = state.isRecording(), exporting = state.isSaving();
         boolean retry = state.phase() == CaptureState.Phase.ERROR || state.phase() == CaptureState.Phase.STOPPED || state.phase() == CaptureState.Phase.SAVED;
         recordButton.setEnabled(state.canMark() || retry); stopButton.setEnabled(state.canFinish());
@@ -228,6 +265,8 @@ public final class MainActivity extends Activity {
         stopButton.setAlpha(state.canFinish() ? 1f : 0.45f);
         settingsButton.setEnabled(!active && !exporting);
         galleryButton.setEnabled(!active && !exporting);
+        pauseButton.setEnabled(!active && !exporting && cameraLoop.isRunning());
+        pauseButton.setAlpha(pauseButton.isEnabled() ? 1f : 0.45f);
         settingsButton.setAlpha(settingsButton.isEnabled() ? 1f : 0.45f);
         galleryButton.setAlpha(galleryButton.isEnabled() ? 1f : 0.45f);
         recDot.setVisibility(active ? View.VISIBLE : View.GONE);
@@ -245,7 +284,7 @@ public final class MainActivity extends Activity {
         recLabel.setText(label);
         recLabel.setTextColor(active ? 0xFFFF6565 : WHITE);
         historyHint.setText("Histórico: até " + past + " s • após marcar: " + durationLabel()
-                + "\nFragmentos de ~4 s; pequenos intervalos possíveis.");
+                + "\nSó os últimos segundos ficam no histórico; o restante é apagado. Câmera ativa consome bateria.");
     }
     private void requestPermissionsIfNeeded() {
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
@@ -271,7 +310,8 @@ public final class MainActivity extends Activity {
     }
     private String durationLabel() { return postMinutes == 0 ? "sem limite fixo" : postMinutes + " min"; }
     private void updateVoiceSubtitle() {
-        subtitle.setText(useVoice ? "Voz local: “" + startPhrase + "”" : "Capture com um toque");
+        subtitle.setText(useVoice ? "Diga “" + startPhrase + "”" : "Capture com um toque");
+        if (voiceLabel != null) voiceLabel.setText(useVoice ? voiceStatus : "Voz desligada • início: 1 bip; fim: 2 bips");
     }
     private void openSettings() {
         if (cameraLoop.isCapturing()) return;
@@ -319,7 +359,7 @@ public final class MainActivity extends Activity {
                     case 4: editPhrases(); break;
                     default:
                         new AlertDialog.Builder(this).setTitle("Privacidade e limites do teste")
-                            .setMessage("Seus vídeos ficam no aparelho, sem transmissão, assinatura ou cobrança. A câmera funciona com esta tela aberta. Ao sair, um lance marcado será finalizado com tentativa de salvamento; o histórico sem marcação é descartado. Fragmentos de ~4 s podem ter lacunas. Voz exige reconhecimento no dispositivo e pode disputar o microfone: use os botões se indisponível. A qualidade depende da câmera e pode cair para um modo compatível.")
+                            .setMessage("Vídeos e reconhecimento de voz ficam no aparelho, sem transmissão, assinatura ou cobrança. O áudio de um único microfone alimenta a gravação e os comandos locais. O histórico guarda só os últimos segundos e apaga continuamente o que ficou antigo. Espaço baixo pausa a captura com aviso. Manter a câmera ativa consome bateria: pause nos intervalos. Ao sair, um lance marcado será finalizado com tentativa de salvamento. A qualidade depende do aparelho.")
                             .setPositiveButton("Entendi",null).show();
                 }
             }).setNegativeButton("Fechar",null).show();
@@ -368,7 +408,7 @@ public final class MainActivity extends Activity {
         if (cameraLoop != null && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
                 checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             cameraLoop.resumeActivity(); cameraLoop.start();
-            if (voice != null && useVoice) voice.enable();
+            if (voice != null && useVoice && cameraLoop.isRunning()) voice.enable();
         }
     }
     @Override protected void onPause() {
@@ -387,6 +427,8 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         uiHandler.removeCallbacksAndMessages(null);
+        if (voice != null) voice.close();
+        if (tones != null) { tones.release(); tones = null; }
         if (cameraLoop != null) cameraLoop.release();
         super.onDestroy();
     }

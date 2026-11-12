@@ -6,7 +6,7 @@ import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
-import android.media.MediaRecorder;
+import android.media.MediaCodec;
 import android.util.Range;
 import android.util.Size;
 import java.util.*;
@@ -34,12 +34,12 @@ public final class CameraModes {
         StreamConfigurationMap map=cc.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         Range<Integer>[] ranges=cc.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
         if(map==null || ranges==null) return result;
-        Size[] recorder=map.getOutputSizes(MediaRecorder.class), preview=map.getOutputSizes(SurfaceTexture.class);
+        Size[] recorder=map.getOutputSizes(MediaCodec.class), preview=map.getOutputSizes(SurfaceTexture.class);
         if(recorder==null || preview==null) return result;
         for(Size size:recorder) {
             int w=size.getWidth(),h=size.getHeight();
             if(w<h || w>3840 || h>2160 || !Arrays.asList(preview).contains(size)) continue;
-            long minNs=Math.max(map.getOutputMinFrameDuration(MediaRecorder.class,size),
+            long minNs=Math.max(map.getOutputMinFrameDuration(MediaCodec.class,size),
                     map.getOutputMinFrameDuration(SurfaceTexture.class,size));
             for(int fps:new int[]{30,60}) {
                 if(fps==60 && minNs==0) continue;

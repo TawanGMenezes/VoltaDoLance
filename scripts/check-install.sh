@@ -14,8 +14,8 @@ grep -q 'Success' install-results/clean-install.txt
 timeout 120 adb install --no-streaming -r "$apk" | tee install-results/reinstall.txt
 grep -q 'Success' install-results/reinstall.txt
 adb shell dumpsys package "$package" > install-results/package.txt
-grep -q 'versionCode=3' install-results/package.txt
-grep -q 'versionName=0.2.1-alpha' install-results/package.txt
+grep -q 'versionCode=4' install-results/package.txt
+grep -q 'versionName=0.3.0-alpha' install-results/package.txt
 
 adb shell am start -W -n "$package/br.com.voltadolance.MainActivity" | tee install-results/launch.txt
 grep -q 'Status: ok' install-results/launch.txt

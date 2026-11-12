@@ -27,6 +27,16 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: voltadolance-debug-keystore-v1
+      - name: Cache do modelo offline em portugues
+        uses: actions/cache@v4
+        with:
+          path: .models/
+          key: vosk-pt-small-0.3-6e1ce909
+      - name: Preparar audio de teste sintetico em portugues
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends espeak-ng ffmpeg
+          bash scripts/prepare-test-audio.sh
       - name: Executar testes unitários
         run: gradle --no-daemon :app:testDebugUnitTest
       - name: Gerar APK de teste
@@ -34,6 +44,7 @@ jobs:
       - name: Verificar assinatura e versão do APK
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | head -n 1
       - name: Habilitar aceleracao do Android de teste
         run: |
@@ -49,7 +60,11 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
-          script: bash scripts/check-install.sh
+          script: |
+            bash scripts/check-install.sh
+            gradle --no-daemon :app:connectedDebugAndroidTest
+            adb exec-out run-as br.com.voltadolance.dev cat files/continuity-report.txt > install-results/continuity-report.txt
+            adb exec-out run-as br.com.voltadolance.dev cat files/continuity-sample.mp4 > install-results/continuity-sample.mp4
       - name: Publicar APK na aba Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -64,6 +79,8 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/test-results/
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
             install-results/
   publish:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -80,9 +97,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          BUILD_TAG: alpha-0.2.1-${{ github.run_number }}-${{ github.run_attempt }}
+          BUILD_TAG: alpha-0.3.0-${{ github.run_number }}-${{ github.run_attempt }}
           BUILD_SHA: ${{ github.sha }}
         run: |
-          mv apk/app-debug.apk apk/VoltaDoLance-0.2.1-alpha.apk
-          gh release create "$BUILD_TAG" apk/VoltaDoLance-0.2.1-alpha.apk --target "$BUILD_SHA" --prerelease --title "Volta do Lance 0.2.1 alpha" --notes "APK de teste com instalacao limpa, reinstalacao e abertura verificadas em Android 15 no Actions. Ainda requer validacao no OPPO real. Sem assinaturas ou cobrancas."
+          mv apk/app-debug.apk apk/VoltaDoLance-0.3.0-alpha.apk
+          gh release create "$BUILD_TAG" apk/VoltaDoLance-0.3.0-alpha.apk --target "$BUILD_SHA" --prerelease --title "Volta do Lance 0.3.0 alpha" --notes "Captura continua com historico limitado, voz offline no mesmo microfone e bips de inicio/fim. Testes de instalacao, Camera2/AVC/AAC e fala sintetica em portugues no Android 15. Validacao no OPPO real ainda necessaria. Sem assinaturas ou cobrancas."
 
