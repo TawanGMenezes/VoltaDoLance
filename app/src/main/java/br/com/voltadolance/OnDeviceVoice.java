@@ -140,13 +140,14 @@ public final class OnDeviceVoice implements AutoCloseable {
                         recognizer.reset();
                         state(current, "Voz: áudio atrasou; escuta retomada");
                     }
+                    boolean endpoint = recognizer.acceptWaveForm(chunk.bytes, chunk.bytes.length);
                     if (!listening) {
                         listening = true;
                         state(current, "Voz: ouvindo comandos");
                     }
                     // A partial hypothesis may change from MARK to FINISH. Only endpointed
                     // results dispatch, once per endpoint; getResult consumes that utterance.
-                    if (recognizer.acceptWaveForm(chunk.bytes, chunk.bytes.length)) {
+                    if (endpoint) {
                         String text = new JSONObject(recognizer.getResult()).optString("text", "");
                         if (!text.isEmpty()) {
                             VoiceCommands.Command command = utterances.accept(text, true);

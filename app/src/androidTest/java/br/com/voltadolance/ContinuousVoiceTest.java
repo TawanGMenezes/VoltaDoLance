@@ -48,6 +48,10 @@ public class ContinuousVoiceTest {
             while((length=input.read(chunk))!=-1) {decoder.onPcm(chunk,length);Thread.sleep(100);}
         }
     }
+    private void ambientSilence(OnDeviceVoice decoder,long milliseconds) throws Exception {
+        byte[] silence=new byte[3200];long until=SystemClock.elapsedRealtime()+milliseconds;
+        while(SystemClock.elapsedRealtime()<until) {decoder.onPcm(silence,silence.length);Thread.sleep(100);}
+    }
     private Uri newest(Context context) {
         try(Cursor c=context.getContentResolver().query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                 new String[]{MediaStore.Video.Media._ID},MediaStore.Video.Media.RELATIVE_PATH+" LIKE ?",
@@ -94,13 +98,21 @@ public class ContinuousVoiceTest {
             // Use production callbacks with controlled PCM. Actual recorder still owns the only microphone.
             decoder=ui(a->{
                 OnDeviceVoice original=(OnDeviceVoice)field(a,"voice");
-                OnDeviceVoice controlled=new OnDeviceVoice(a,(OnDeviceVoice.Callback)field(original,"callback"));
+                OnDeviceVoice.Callback delegate=(OnDeviceVoice.Callback)field(original,"callback");
+                OnDeviceVoice controlled=new OnDeviceVoice(a,new OnDeviceVoice.Callback() {
+                    public void onMark() {delegate.onMark();}
+                    public void onFinish() {delegate.onFinish();}
+                    public void onUnavailable() {delegate.onUnavailable();}
+                    public void onState(String value) {android.util.Log.i("VoiceFixture",value);delegate.onState(value);}
+                });
                 controlled.setPhrases("peixe na linha","pode salvar");controlled.enable();return controlled;
             });
             final OnDeviceVoice readyDecoder=decoder;
             await("Bundled Portuguese model did not load",readyDecoder::isReady,60000);
             long initialStart=historyBounds(engine)[0];
-            Thread.sleep(20000);
+            // The real recorder streams ambient audio continuously before a user speaks.
+            // Exercise that same warm-up instead of beginning a cold decoder at the first phoneme.
+            ambientSilence(decoder,20000);
             long[] retained=historyBounds(engine);
             assertTrue("unmarked history retained old startup video",retained[0]>initialStart+2_000_000);
             assertTrue("unmarked history grew beyond selected window",retained[1]-retained[0]<17_000_000);
