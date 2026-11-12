@@ -1,0 +1,7 @@
+PASS: boundary overlap included
+PASS: oldest chunk evicted
+PASS: relevant chunk preserved
+PASS: evicts all outdated chunks
+PASS: clearing empty buffer succeeds
+PASS: rejects inverted timestamps
+OK: 6 tests
