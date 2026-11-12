@@ -161,6 +161,7 @@ public class ContinuousVoiceTest {
             }
         } finally {
             extractor.release();
+            android.util.Log.i("ContinuityTimeline",report.toString());
             try(FileWriter writer=new FileWriter(new File(target.getFilesDir(),"continuity-report.txt"))) {writer.write(report.toString());}
         }
         assertEquals(1,videoTracks);assertEquals(1,audioTracks);

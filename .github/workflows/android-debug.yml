@@ -63,8 +63,7 @@ jobs:
           script: |
             bash scripts/check-install.sh
             gradle --no-daemon :app:connectedDebugAndroidTest
-            adb exec-out run-as br.com.voltadolance.dev cat files/continuity-report.txt > install-results/continuity-report.txt
-            adb exec-out run-as br.com.voltadolance.dev cat files/continuity-sample.mp4 > install-results/continuity-sample.mp4
+            find app/build/outputs/androidTest-results -name 'logcat*.txt' -print0 | xargs -0 grep 'ContinuityTimeline' > install-results/continuity-report.txt
       - name: Publicar APK na aba Artifacts
         uses: actions/upload-artifact@v4
         with:
