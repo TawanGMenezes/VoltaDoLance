@@ -47,6 +47,12 @@ public class EncodedPacketStoreTest {
         assertTrue(s.snapshot().get(0).video);
         s.close(); assertFalse(directory.exists());
     }
+    @Test public void zeroHistoryCanPinImmediatelyAfterFirstKeyframe() throws Exception {
+        EncodedPacketStore s=store();
+        try {video(s,1_000_000L,true); assertTrue(s.mark(0));
+            assertEquals(1_000_000L,s.snapshot().get(0).ptsUs);
+        } finally {s.close();}
+    }
     @Test public void cannotMarkBeforeFirstKeyframe() throws Exception {
         EncodedPacketStore s=store();
         try {video(s,0,false); assertFalse(s.mark(2));} finally {s.close();}
@@ -60,3 +66,4 @@ public class EncodedPacketStoreTest {
         } finally {s.close();}
     }
 }
+
