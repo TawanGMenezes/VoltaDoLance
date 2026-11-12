@@ -98,7 +98,8 @@ public final class MainActivity extends Activity {
                 refreshButtons();
             }
             @Override public void onSaved(Uri uri) {
-                stateLabel.setText("Vídeo salvo • apenas no seu aparelho");
+                stateLabel.setText("Vídeo salvo • apenas no seu aparelho" +
+                        (cameraLoop.completionReason().isEmpty() ? "" : " • " + cameraLoop.completionReason()));
                 savedNotice.setText("✓ Vídeo salvo • abra a Galeria");
                 savedNotice.setVisibility(View.VISIBLE);
                 uiHandler.postDelayed(() -> savedNotice.setVisibility(View.GONE), 5000);
@@ -120,9 +121,11 @@ public final class MainActivity extends Activity {
             @Override public void onUnavailable() {
                 useVoice = false; preferences.edit().putBoolean("voice", false).apply();
                 subtitle.setText("Comandos locais indisponíveis • use o botão");
+                Toast.makeText(MainActivity.this, "Voz local indisponível neste aparelho ou com o microfone em uso. Use os botões.", Toast.LENGTH_LONG).show();
             }
         });
         voice.setPhrases(startPhrase, stopPhrase);
+        refreshButtons();
         requestPermissionsIfNeeded();
     }
     private void buildUi() {
@@ -164,7 +167,13 @@ public final class MainActivity extends Activity {
         recordButton.setId(R.id.mark_moment);
         LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1, dp(62));
         bLp.topMargin = dp(14); bottom.addView(recordButton, bLp);
-        recordButton.setOnClickListener(v -> { cameraLoop.markMoment(); refreshButtons(); });
+        recordButton.setOnClickListener(v -> {
+            CaptureState.Phase phase = cameraLoop.state().phase();
+            if (phase == CaptureState.Phase.ERROR || phase == CaptureState.Phase.STOPPED || phase == CaptureState.Phase.SAVED) {
+                cameraLoop.resumeActivity(); cameraLoop.start();
+            } else cameraLoop.markMoment();
+            refreshButtons();
+        });
         stopButton = button("ENCERRAR E SALVAR", 0xFF2B4F60, WHITE);
         stopButton.setId(R.id.finish_save);
         LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1, dp(54));
@@ -208,10 +217,11 @@ public final class MainActivity extends Activity {
         if (cameraLoop == null || recordButton == null) return;
         CaptureState state = cameraLoop.state();
         boolean active = state.isRecording(), exporting = state.isSaving();
-        recordButton.setEnabled(state.canMark()); stopButton.setEnabled(state.canFinish());
-        recordButton.setText(exporting ? "SALVANDO…" : active ? "MOMENTO EM GRAVAÇÃO" : "GUARDAR MOMENTO");
+        boolean retry = state.phase() == CaptureState.Phase.ERROR || state.phase() == CaptureState.Phase.STOPPED || state.phase() == CaptureState.Phase.SAVED;
+        recordButton.setEnabled(state.canMark() || retry); stopButton.setEnabled(state.canFinish());
+        recordButton.setText(exporting ? "SALVANDO…" : active ? "MOMENTO EM GRAVAÇÃO" : retry ? "RETOMAR CÂMERA" : "GUARDAR MOMENTO");
         stopButton.setText(exporting ? "AGUARDE O VÍDEO SER SALVO" : "ENCERRAR E SALVAR");
-        recordButton.setAlpha(state.canMark() ? 1f : 0.45f);
+        recordButton.setAlpha(recordButton.isEnabled() ? 1f : 0.45f);
         stopButton.setAlpha(state.canFinish() ? 1f : 0.45f);
         settingsButton.setEnabled(!active && !exporting);
         galleryButton.setEnabled(!active && !exporting);
@@ -371,5 +381,10 @@ public final class MainActivity extends Activity {
             .setMessage("Ao sair, um lance marcado será encerrado com tentativa de salvamento. O histórico sem marcação será descartado.")
             .setNegativeButton("Continuar", null)
             .setPositiveButton("Sair", (d,w) -> MainActivity.super.onBackPressed()).show();
+    }
+    @Override protected void onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null);
+        if (cameraLoop != null) cameraLoop.release();
+        super.onDestroy();
     }
 }

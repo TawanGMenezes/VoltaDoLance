@@ -1,51 +1,39 @@
-# Volta do Lance — Android alpha (código-fonte)
+# Volta do Lance — alpha 0.2
 
-**Status:** versão de desenvolvimento **não compilada e não testada em celular** neste ambiente. Não há APK incluso neste pacote. Não use como único registro de uma pescaria importante.
+App Android independente, com nome, cores e textos próprios. Sem assinatura, cobrança, conta, anúncios ou envio de vídeos. Permissões: câmera e microfone; sem INTERNET.
 
-Aplicativo Android independente, com nome, cores, organização de telas e textos próprios. As referências visuais compartilhadas pelo usuário serviram para identificar funcionalidades de categoria — não para reproduzir a identidade do aplicativo de referência.
+## Novidades
 
-## Funcionalidades desta alpha
+- Indicador vermelho REC piscando, com cronômetro do tempo após marcar. Estados separados de preparação, histórico ativo, gravação, salvamento, vídeo salvo e erro.
+- Botões de marcar/encerrar, galeria e ajustes acompanham o estado. Salvamento bloqueia novos comandos; falhas permitem retomar a câmera.
+- Frases de marcar e encerrar editáveis nos ajustes, persistidas apenas no aparelho. Padrões: “Marcar momento” e “Encerrar vídeo”. Fale a frase inteira; acentos, caixa e pontuação são ignorados. Apenas a hipótese final mais provável é usada; resultados parciais não acionam comandos.
+- Duração após marcar: 3, 10 (padrão), 20, 30, 60 minutos ou sem limite fixo. Parada com tentativa de salvamento por duração, pouco espaço, bateria em 5% fora do carregador ou estado térmico SEVERE do Android. A reserva inclui duas cópias do evento para montagem e publicação, mais margem e fragmentos futuros.
+- Qualidades consultadas em Camera2: tamanhos de MediaRecorder e prévia, duração mínima dos frames, faixas AE e codificador AVC. 4K30, 1080p60 e outros modos aparecem quando informados como compatíveis. 4K60 só aparece com suporte informado para essa combinação; não é prometido. Sessões de alta velocidade especiais não são usadas. Uma rejeição tenta modos inferiores e limpa o histórico incompatível antes de marcar. A qualidade ativa aparece na tela.
+- Galeria com miniaturas carregadas fora da interface e ícone de reprodução.
 
-- Câmera traseira, pré-visualização em retrato, áudio ambiente, vídeo 720p ou 1080p (30fps, dependente da câmera).
-- Captura de fragmentos MP4 curtos e guarda uma janela **aproximada** de 15, 30 ou 60 segundos anteriores ao toque em **Guardar momento**. Pode haver pequenos intervalos entre fragmentos e imprecisão na duração anterior.
-- Continua a captura após marcar o lance até **Encerrar e salvar**, limitada a três minutos por evento nesta alfa (a futura seleção de duração já consta no planejamento); depois une fragmentos e salva em `Movies/VoltaDoLance` pelo MediaStore.
-- Galeria com reprodução dos vídeos; modo de prévia preta com a tela **acesa** (não é gravação garantida em segundo plano).
-- Reconhecimento de voz **experimental e opcional**, usando mecanismo **no dispositivo** quando disponível: “Marcar momento”, “Guardar lance”, “Encerrar vídeo”, “Finalizar vídeo”, “Parar vídeo”. Em alguns dispositivos o microfone não pode ser compartilhado pela gravação e reconhecimento; use sempre o botão como fallback.
-- Sem internet, analytics, contas, anúncios, bibliotecas de publicidade ou pagamentos. Solicita apenas CAMERA e RECORD_AUDIO.
+## Histórico e privacidade
 
-## Limitações de segurança e funcionamento
+O histórico anterior de 15, 30 ou 60 segundos continua em fragmentos privados de aproximadamente 4 segundos. Há pequenas lacunas entre fragmentos e a seleção anterior é aproximada. Ao encerrar, os fragmentos são unidos e o MP4 é publicado em `Movies/VoltaDoLance` usando MediaStore/IS_PENDING. Temporários são removidos após exportação ou descarte normal. Fragmentos de um processo interrompido podem permanecer no cache até sua limpeza pelo Android.
 
-**Somente com a atividade aberta.** Sair da tela, bloquear o celular ou trocar de aplicativo encerra a captura. Eventos em gravação ainda não finalizados podem ser perdidos. **O modo preto não bloqueia a tela.** Não há promessa de gravação com aparelho bloqueado. O Android pode interromper gravação por calor, falta de espaço, mudança de permissões ou disputa de câmera/microfone.
+A captura funciona com esta tela aberta. Ao sair ou bloquear, um evento marcado é encerrado com tentativa de salvamento; o histórico sem marcação é descartado. O modo de prévia preta mantém o indicador visível e não bloqueia o aparelho. A exportação continua durante a pausa da atividade, mas encerramento forçado do processo pode perder o evento. Não há restauração automática de vídeos após falhas do processo.
 
-Os vídeos são armazenados no dispositivo. Arquivos temporários ficam dentro do armazenamento privado do app e são apagados após exportar ou sair da captura. Se o processo for encerrado inesperadamente, fragmentos podem permanecer no cache e serão limpos pelo Android no futuro; não há upload de arquivos.
+Voz é experimental, opcional e exclusivamente no dispositivo (Android 12+ com mecanismo local disponível). Alguns aparelhos não compartilham o microfone entre reconhecimento e gravação. Falhas repetidas desativam a voz; os botões continuam disponíveis. Segurança de espaço/bateria/calor reduz riscos, sem garantir salvamento diante de falha de hardware ou desligamento.
 
-**Teste com cenas sem valor** antes de levar para pescarias. Não existe mecanismo de restauração de vídeo após falhas do processo nesta alpha.
+## APK pelo GitHub Actions
 
-## Como gerar o APK em nuvem (GitHub Actions)
+Acesse [Actions](https://github.com/TawanGMenezes/VoltaDoLance/actions), escolha a execução mais recente bem-sucedida da branch `alpha-0.2`, e baixe **VoltaDoLance-debug-apk** em **Artifacts** (requer login no GitHub). Extraia `app-debug.apk` do ZIP e abra no celular.
 
-1. Crie um **repositório privado e vazio** no GitHub para este aplicativo.
-2. Envie **todo o conteúdo desta pasta**, preservando `.github/workflows/android-debug.yml` e a pasta `app/`, na raiz do repositório. Você pode usar o GitHub Desktop ou o Git pelo computador.
-3. No GitHub, abra **Actions** > **Build Android APK de teste** > **Run workflow**. Um push na branch `main` ou `master` também inicia o build.
-4. Aguarde o resultado; confirme que os testes e a compilação passaram. Baixe o artefato **VoltaDoLance-debug-apk** na página da execução (ele vem como ZIP contendo `app-debug.apk`).
-5. Instale apenas esse APK gerado **no seu próprio repositório** no OPPO Reno14 F; o Android pode pedir permissão para instalar apps desta fonte.
-6. Conceda acesso à câmera e ao microfone somente enquanto usa o app. Teste primeiro 720p e 15 s, em ambiente seguro, conferindo se o MP4 aparece e reproduz corretamente na galeria.
+O workflow executa todos os testes JVM/Robolectric, monta o APK debug e verifica assinatura e versão. Relatórios ficam no artefato **VoltaDoLance-test-results**. Ferramentas usadas: Java 17, Gradle 8.13, SDK/build-tools 36, AGP 8.12.2. Versão do app: `0.2.0-alpha`, código `2`, pacote `br.com.voltadolance.dev`.
 
-**Importante:** o GitHub Action faz a compilação num servidor, mas precisa ser executado em um repositório com estes arquivos. Este ZIP não é um instalador. Builds `debug` usam uma chave de teste gerada na compilação: não servem para publicação na Google Play nem devem ser distribuídos comercialmente.
+A assinatura debug é de testes. Se o Android recusar atualização por assinatura diferente, faça cópia dos vídeos antes de remover a versão antiga. Não use este build para distribuição comercial.
 
-## Testes manuais essenciais no OPPO Reno14 F
+## Validação em aparelho ainda necessária
 
-- Permissões permitidas/negadas e recuperação depois de voltar às configurações.
-- Prévia e áudio (720p → 1080p), orientação correta, imagem e sincronização A/V.
-- Começar o buffer, aguardar 20–65 s; marcar; gravar mais 10 s; encerrar; conferir duração real e início do MP4.
-- Repetir dez vezes para identificar perdas de segmentos, telas travadas ou falha de junção.
-- Abrir galeria enquanto salva; sair da câmera; bloquear a tela; negar microfone; trocar de app; pouca memória/espaço.
-- Voz ligada/desligada (inclusive **SEM rede**) e gravação de áudio simultânea.
-- Aquecimento e consumo de bateria durante 10, 30 e 60 minutos com o dispositivo apoiado, sem cobrir saídas de calor.
+Os testes automatizados cobrem estados/controles/REC, correspondência de voz, persistência de frases, janela anterior e regras de segurança. Eles não substituem gravação no OPPO Reno14 F.
 
-## Estrutura para futura monetização
-
-Esta alpha **não implementa plano pago**. Para publicar, primeiro estabilizar gravação e proteger os dados. O desenho de monetização previsto em `docs/ROADMAP.md` coloca recursos pagos atrás de um módulo futuro de **Google Play Billing**, com verificação de compra, restauração e gerenciamento de assinatura. Nunca habilitar cobrança antes de testar a oferta, fluxos de cancelamento, privacidade, estabilidade e conformidade com as políticas vigentes da Google Play.
-
-## Licença e titularidade
-
-Código entregue para avaliação e evolução pelo usuário. Não incorpora marca, imagens, textos ou código-fonte do aplicativo de referência. Antes da distribuição comercial, revisar o registro de marca, termos de uso, a política de privacidade e as licenças de qualquer dependência que venha a ser adicionada.
+1. Primeiro grave em 720p, aguarde 20 segundos de histórico, marque e encerre por botão; reproduza o MP4 com áudio e orientação corretos.
+2. Repita com frases personalizadas, verificando se há reconhecimento enquanto grava áudio.
+3. Teste os modos informados (especialmente 4K30 e 1080p60), confirme qualidade e fluidez do arquivo e mensagens de fallback.
+4. Confira REC, cronômetro, botões desabilitados no salvamento e miniatura na galeria. Repita dez eventos.
+5. Marque e encerre imediatamente; depois teste saída da tela durante gravação e exportação. Confirme o vídeo salvo ao retornar.
+6. Valide uma gravação longa com espaço disponível, encerramento manual no modo sem limite e estabilidade térmica. O limite configurado conta o tempo após marcar, além do histórico selecionado.

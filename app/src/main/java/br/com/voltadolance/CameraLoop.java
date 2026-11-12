@@ -43,7 +43,7 @@ public final class CameraLoop {
     private long startedAtMs,captureAtMs;
     private int pastSeconds=15,cameraOrientation=90;
     private long maxEventMs=600000;
-    private boolean running,recording,closing,activityActive=true,safetyPaused;
+    private boolean running,recording,closing,activityActive=true,safetyPaused,disposed;
     private int generation,segmentGeneration;
     private String requestedMode="1280x720@30";
     private List<CameraModes.Mode> modes=Collections.emptyList();
@@ -62,12 +62,13 @@ public final class CameraLoop {
     }
     public boolean isCapturing() { return state.isRecording() || state.isSaving(); }
     public boolean isRunning() { return running; }
+    public String completionReason() { return safetyNotice; }
     public String modeLabel() { return modes.isEmpty()?"Detectando câmera":modes.get(modeIndex).label(); }
     private void status(String text) { listener.onStatus(text); }
 
     @SuppressLint("MissingPermission")
     public void start() {
-        if(running || closing || state.isSaving() || !activityActive || safetyPaused) return;
+        if(running || closing || state.isSaving() || !activityActive || safetyPaused || disposed) return;
         if(activity.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED
                 || activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
             error("Autorize câmera e microfone para começar"); return;
@@ -102,10 +103,10 @@ public final class CameraLoop {
                     camera=device; newSegment();
                 }
                 public void onDisconnected(CameraDevice device) {
-                    device.close(); if(token==generation) fail("Câmera desconectada",null);
+                    device.close(); if(token==generation && !closing && !state.isSaving()) fail("Câmera desconectada",null);
                 }
                 public void onError(CameraDevice device,int code) {
-                    device.close(); if(token==generation) fail("Falha na câmera ("+code+")",null);
+                    device.close(); if(token==generation && !closing && !state.isSaving()) fail("Falha na câmera ("+code+")",null);
                 }
             },main);
         } catch(Exception e) { fail("Não foi possível abrir a câmera",e); }
@@ -254,7 +255,7 @@ public final class CameraLoop {
             }
         } catch(Exception e) {
             for(File file:stable) file.delete(); for(File file:all) file.delete();
-            error("Falha ao proteger vídeo: "+e.getMessage()); return;
+            error("Falha ao proteger vídeo: "+e.getMessage()); if(disposed) io.shutdown(); return;
         }
         for(File file:all) file.delete();
         final int orientation=cameraOrientation;
@@ -267,7 +268,7 @@ public final class CameraLoop {
                 Uri uri=VideoStore.save(activity,merged);
                 main.post(() -> { state.saved(); listener.onSaved(uri); if(activityActive && !safetyPaused) start(); });
             } catch(Exception e) { main.post(() -> error("Falha ao salvar: "+e.getMessage())); }
-            finally { for(File file:stable) file.delete(); if(merged!=null) merged.delete(); }
+            finally { for(File file:stable) file.delete(); if(merged!=null) merged.delete(); if(disposed) io.shutdown(); }
         });
     }
     private void closeCamera() {
@@ -293,4 +294,5 @@ public final class CameraLoop {
         stopBuffer(); state.stopped();
     }
     public void resumeActivity() { activityActive=true; safetyPaused=false; }
+    public void release() { disposed=true; if(!state.isSaving()) io.shutdown(); }
 }
