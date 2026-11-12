@@ -5,12 +5,14 @@
 - [x] Telas originais de câmera, ajustes e galeria
 - [x] Captura segmentada e exportação MP4, voz experimental
 - [x] Sem permissão de internet e sem serviços remotos
-- [ ] Compilação bem-sucedida em ambiente com Android SDK instalado
+- [x] Compilação debug e testes JVM/UI bem-sucedidos no GitHub Actions (alpha 0.2)
 - [ ] Testes práticos em OPPO Reno14 F
 - [ ] Validar integridade, áudio, orientação e sem perdas entre fragmentos
 
 ## Etapa 2 — Beta confiável
-- [ ] Configuração da duração pós-marcar (ex.: 3, 5, 10, 20, 30, 60 minutos e personalizado), com espaço livre mínimo e encerramento seguro; na alfa permanece fixada em 3 minutos
+- [x] Alpha 0.2: duração pós-marcar de 3, 10, 20, 30 e 60 minutos ou sem limite fixo, com reserva de espaço, bateria e proteção térmica
+- [x] Alpha 0.2: REC piscando com cronômetro, estados de salvamento, frases locais editáveis e miniaturas na galeria
+- [x] Alpha 0.2: modos Camera2/AVC reportados pelo aparelho, incluindo tentativa de 4K30 e 1080p60 quando disponíveis, com fallback
 - [ ] Substituir reinicialização da MediaRecorder a cada 4 s por captura/encoder contínuos (Camera2 + MediaCodec + MediaMuxer), com buffer circular robusto
 - [ ] Testar reconhecimento de palavra-chave offline independente do gravador sem disputa do microfone
 - [ ] Salvar eventos com recuperação caso o app seja interrompido

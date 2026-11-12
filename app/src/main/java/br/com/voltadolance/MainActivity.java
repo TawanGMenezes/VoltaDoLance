@@ -203,6 +203,9 @@ public final class MainActivity extends Activity {
         indicator.addView(recDot); indicator.addView(recLabel);
         FrameLayout.LayoutParams recLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         recLp.topMargin = dp(104); root.addView(indicator, recLp);
+        top.addOnLayoutChangeListener((v,l,t,r,b,oldL,oldT,oldR,oldB) -> {
+            recLp.topMargin = b + dp(12); indicator.setLayoutParams(recLp);
+        });
         setContentView(root);
         refreshButtons();
     }

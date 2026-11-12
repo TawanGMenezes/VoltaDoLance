@@ -12,6 +12,8 @@ import java.util.List;
 import android.os.SystemClock;
 import java.time.Duration;
 import org.robolectric.shadows.ShadowSystemClock;
+import android.os.Looper;
+import static org.robolectric.Shadows.shadowOf;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -31,6 +33,8 @@ public class MainActivityTest {
     @Test public void editedPortuguesePhrasesPersistAcrossActivityRecreation() throws Exception {
         MainActivity activity=Robolectric.buildActivity(MainActivity.class).create().get();
         Method edit=MainActivity.class.getDeclaredMethod("editPhrases"); edit.setAccessible(true); edit.invoke(activity);
+        // Dialog dispatches onShow asynchronously; allow its button handler to attach.
+        shadowOf(Looper.getMainLooper()).idle();
         AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog();
         List<EditText> inputs=new ArrayList<>(); editTexts(dialog.getWindow().getDecorView(),inputs);
         assertEquals(2,inputs.size());
