@@ -15,13 +15,14 @@ import java.util.Map;
 public final class Mp4Joiner {
     private Mp4Joiner() { }
 
-    public static void join(List<File> files, File destination) throws IOException {
+    public static void join(List<File> files, File destination, int orientation) throws IOException {
         if (files.isEmpty()) throw new IOException("Nenhum fragmento disponível");
         Map<String, Integer> outTracks = new HashMap<>();
         MediaMuxer muxer = new MediaMuxer(destination.getAbsolutePath(),
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         boolean started = false;
         try {
+            muxer.setOrientationHint(orientation);
             MediaExtractor first = new MediaExtractor();
             try {
                 first.setDataSource(files.get(0).getAbsolutePath());

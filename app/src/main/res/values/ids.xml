@@ -1,0 +1,5 @@
+<resources>
+    <item name="mark_moment" type="id" />
+    <item name="finish_save" type="id" />
+    <item name="rec_indicator" type="id" />
+</resources>

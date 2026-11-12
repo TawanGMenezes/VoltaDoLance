@@ -25,10 +25,22 @@ jobs:
         run: gradle --no-daemon :app:testDebugUnitTest
       - name: Gerar APK de teste
         run: gradle --no-daemon :app:assembleDebug
+      - name: Verificar assinatura e versão do APK
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | head -n 1
       - name: Publicar APK na aba Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VoltaDoLance-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Publicar relatórios de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoltaDoLance-test-results
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
 

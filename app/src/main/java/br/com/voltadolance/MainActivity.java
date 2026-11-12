@@ -11,6 +11,13 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.hardware.camera2.CameraManager;
+import android.widget.EditText;
+import java.util.List;
+import java.util.Locale;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,11 +42,25 @@ public final class MainActivity extends Activity {
     private TextView stateLabel;
     private Button recordButton;
     private Button stopButton;
+    private Button settingsButton;
+    private Button galleryButton;
+    private TextView recLabel;
+    private TextView recDot;
+    private TextView historyHint;
+    private TextView savedNotice;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable uiTick = new Runnable() {
+        @Override public void run() { refreshButtons(); uiHandler.postDelayed(this, 250); }
+    };
     private View shade;
     private boolean dimmed;
     private SharedPreferences preferences;
     private int past = 15;
     private int height = 720;
+    private int postMinutes = 10;
+    private String modeKey;
+    private String startPhrase;
+    private String stopPhrase;
     private boolean useVoice;
 
     private int dp(int n) { return Math.round(getResources().getDisplayMetrics().density * n); }
@@ -64,6 +85,11 @@ public final class MainActivity extends Activity {
         preferences = getSharedPreferences("local_settings", MODE_PRIVATE);
         past = preferences.getInt("past", 15);
         height = preferences.getInt("video_height", 720);
+        modeKey = preferences.getString("video_mode", height == 1080 ? "1920x1080@30" : "1280x720@30");
+        postMinutes = preferences.getInt("post_minutes", 10);
+        if (postMinutes != 0 && postMinutes != 3 && postMinutes != 10 && postMinutes != 20 && postMinutes != 30 && postMinutes != 60) postMinutes = 10;
+        startPhrase = preferences.getString("start_phrase", "Marcar momento");
+        stopPhrase = preferences.getString("stop_phrase", "Encerrar vídeo");
         useVoice = preferences.getBoolean("voice", false);
         buildUi();
         cameraLoop = new CameraLoop(this, preview, new CameraLoop.Listener() {
@@ -73,9 +99,11 @@ public final class MainActivity extends Activity {
             }
             @Override public void onSaved(Uri uri) {
                 stateLabel.setText("Vídeo salvo • apenas no seu aparelho");
+                savedNotice.setText("✓ Vídeo salvo • abra a Galeria");
+                savedNotice.setVisibility(View.VISIBLE);
+                uiHandler.postDelayed(() -> savedNotice.setVisibility(View.GONE), 5000);
                 Toast.makeText(MainActivity.this, "Momento salvo na galeria!", Toast.LENGTH_LONG).show();
                 refreshButtons();
-                cameraLoop.start();
             }
             @Override public void onError(String error) {
                 stateLabel.setText(error);
@@ -84,7 +112,8 @@ public final class MainActivity extends Activity {
             }
         });
         cameraLoop.setPastSeconds(past);
-        cameraLoop.setHeight(height);
+        cameraLoop.setMode(modeKey);
+        cameraLoop.setPostMinutes(postMinutes);
         voice = new OnDeviceVoice(this, new OnDeviceVoice.Callback() {
             @Override public void onMark() { cameraLoop.markMoment(); refreshButtons(); }
             @Override public void onFinish() { cameraLoop.finishAndSave(); refreshButtons(); }
@@ -93,6 +122,7 @@ public final class MainActivity extends Activity {
                 subtitle.setText("Comandos locais indisponíveis • use o botão");
             }
         });
+        voice.setPhrases(startPhrase, stopPhrase);
         requestPermissionsIfNeeded();
     }
     private void buildUi() {
@@ -107,10 +137,12 @@ public final class MainActivity extends Activity {
         subtitle = text("Se acontecer, você não perde.", 12, 0xFFC6D7DF, false);
         titleBlock.addView(brand); titleBlock.addView(subtitle);
         top.addView(titleBlock, new LinearLayout.LayoutParams(0, -2, 1));
-        Button gallery = button("Galeria", 0xFF254257, WHITE);
+        Button gallery = button("▶ Galeria", 0xFF254257, WHITE);
+        galleryButton = gallery;
         gallery.setOnClickListener(v -> startActivity(new Intent(this, GalleryActivity.class)));
         top.addView(gallery, new LinearLayout.LayoutParams(dp(94), dp(48)));
         Button settings = button("⚙", 0xFF254257, WHITE);
+        settingsButton = settings;
         LinearLayout.LayoutParams settingsLp = new LinearLayout.LayoutParams(dp(52), dp(48));
         settingsLp.leftMargin = dp(8); top.addView(settings, settingsLp);
         settings.setOnClickListener(v -> openSettings());
@@ -122,14 +154,19 @@ public final class MainActivity extends Activity {
         bottom.setOrientation(LinearLayout.VERTICAL); bottom.setBackground(bg(0xED091E2C, 22));
         stateLabel = text("Iniciando…", 14, ACCENT, true);
         bottom.addView(stateLabel);
+        savedNotice = text("", 13, 0xFF95E1B5, true);
+        savedNotice.setVisibility(View.GONE); bottom.addView(savedNotice);
         TextView hint = text("Memória recente de até " + past + " s (alfa: pequenos intervalos possíveis).",
                 12, 0xFFC6D7DF, false);
         hint.setId(View.generateViewId()); bottom.addView(hint);
+        historyHint = hint;
         recordButton = button("GUARDAR MOMENTO", ACCENT, BACKGROUND);
+        recordButton.setId(R.id.mark_moment);
         LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(-1, dp(62));
         bLp.topMargin = dp(14); bottom.addView(recordButton, bLp);
         recordButton.setOnClickListener(v -> { cameraLoop.markMoment(); refreshButtons(); });
         stopButton = button("ENCERRAR E SALVAR", 0xFF2B4F60, WHITE);
+        stopButton.setId(R.id.finish_save);
         LinearLayout.LayoutParams stopLp = new LinearLayout.LayoutParams(-1, dp(54));
         stopLp.topMargin = dp(8); bottom.addView(stopButton, stopLp);
         stopButton.setOnClickListener(v -> { cameraLoop.finishAndSave(); refreshButtons(); });
@@ -148,6 +185,15 @@ public final class MainActivity extends Activity {
         black.setGravity(Gravity.CENTER); black.setBackgroundColor(Color.BLACK);
         black.setOnClickListener(v -> toggleShade()); black.setVisibility(View.GONE);
         shade = black; root.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout indicator = new LinearLayout(this);
+        indicator.setPadding(dp(16), dp(10), dp(16), dp(10));
+        indicator.setGravity(Gravity.CENTER); indicator.setBackground(bg(0xED091E2C, 16));
+        recDot = text("●  ", 22, 0xFFFF4545, true);
+        recLabel = text("PREPARANDO", 18, WHITE, true);
+        recLabel.setId(R.id.rec_indicator);
+        indicator.addView(recDot); indicator.addView(recLabel);
+        FrameLayout.LayoutParams recLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        recLp.topMargin = dp(104); root.addView(indicator, recLp);
         setContentView(root);
         refreshButtons();
     }
@@ -160,9 +206,33 @@ public final class MainActivity extends Activity {
     }
     private void refreshButtons() {
         if (cameraLoop == null || recordButton == null) return;
-        boolean active = cameraLoop.isCapturing();
-        recordButton.setEnabled(!active); stopButton.setEnabled(active);
-        recordButton.setAlpha(active ? 0.4f : 1f); stopButton.setAlpha(active ? 1f : 0.4f);
+        CaptureState state = cameraLoop.state();
+        boolean active = state.isRecording(), exporting = state.isSaving();
+        recordButton.setEnabled(state.canMark()); stopButton.setEnabled(state.canFinish());
+        recordButton.setText(exporting ? "SALVANDO…" : active ? "MOMENTO EM GRAVAÇÃO" : "GUARDAR MOMENTO");
+        stopButton.setText(exporting ? "AGUARDE O VÍDEO SER SALVO" : "ENCERRAR E SALVAR");
+        recordButton.setAlpha(state.canMark() ? 1f : 0.45f);
+        stopButton.setAlpha(state.canFinish() ? 1f : 0.45f);
+        settingsButton.setEnabled(!active && !exporting);
+        galleryButton.setEnabled(!active && !exporting);
+        settingsButton.setAlpha(settingsButton.isEnabled() ? 1f : 0.45f);
+        galleryButton.setAlpha(galleryButton.isEnabled() ? 1f : 0.45f);
+        recDot.setVisibility(active ? View.VISIBLE : View.GONE);
+        recDot.setAlpha((SystemClock.elapsedRealtime() / 500) % 2 == 0 ? 1f : 0.2f);
+        String label;
+        if (active) {
+            long seconds = state.elapsed(SystemClock.elapsedRealtime()) / 1000;
+            label = String.format(Locale.ROOT, "REC %02d:%02d:%02d", seconds/3600, (seconds/60)%60, seconds%60);
+        } else if (exporting) label = "SALVANDO…";
+        else if (state.phase() == CaptureState.Phase.BUFFERING) label = "HISTÓRICO ATIVO";
+        else if (state.phase() == CaptureState.Phase.SAVED) label = "VÍDEO SALVO";
+        else if (state.phase() == CaptureState.Phase.ERROR) label = "CAPTURA PAUSADA";
+        else if (state.phase() == CaptureState.Phase.STOPPED) label = "CÂMERA PARADA";
+        else label = "PREPARANDO…";
+        recLabel.setText(label);
+        recLabel.setTextColor(active ? 0xFFFF6565 : WHITE);
+        historyHint.setText("Histórico: até " + past + " s • após marcar: " + durationLabel()
+                + "\nFragmentos de ~4 s; pequenos intervalos possíveis.");
     }
     private void requestPermissionsIfNeeded() {
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
@@ -184,65 +254,104 @@ public final class MainActivity extends Activity {
     private void startCapture() {
         cameraLoop.resumeActivity(); cameraLoop.start();
         if (useVoice && !voice.enable()) useVoice = false;
-        subtitle.setText(useVoice ? "Ouvido local ativo • diga ‘Marcar momento’" : "Capture com um toque");
+        updateVoiceSubtitle();
+    }
+    private String durationLabel() { return postMinutes == 0 ? "sem limite fixo" : postMinutes + " min"; }
+    private void updateVoiceSubtitle() {
+        subtitle.setText(useVoice ? "Voz local: “" + startPhrase + "”" : "Capture com um toque");
     }
     private void openSettings() {
+        if (cameraLoop.isCapturing()) return;
         String[] options = {
             "Histórico antes do lance: " + past + " s",
-            "Qualidade: " + (height == 1080 ? "1080p" : "720p") + " / 30 fps",
-            "Duração após marcar: 3 min (teste)",
-            "Voz local (experimental): " + (useVoice ? "ativada" : "desativada"),
+            "Qualidade atual: " + cameraLoop.modeLabel(),
+            "Duração após marcar: " + durationLabel(),
+            "Voz local: " + (useVoice ? "ativada" : "desativada"),
+            "Editar frases de voz",
             "Como funciona e privacidade"
         };
         new AlertDialog.Builder(this).setTitle("Ajustar sua captura")
-                .setItems(options, (dialog, index) -> {
-                    switch (index) {
-                        case 0:
-                            String[] times = {"15 segundos", "30 segundos", "60 segundos"};
-                            new AlertDialog.Builder(this).setTitle("Quanto tempo guardar antes?")
-                                .setSingleChoiceItems(times, past == 15 ? 0 : past == 30 ? 1 : 2,
-                                    (d, choice) -> {
-                                        past = choice == 0 ? 15 : choice == 1 ? 30 : 60;
-                                        preferences.edit().putInt("past", past).apply();
-                                        cameraLoop.setPastSeconds(past);
-                                        d.dismiss();
-                                        Toast.makeText(this, "Histórico definido em " + past + " s", Toast.LENGTH_SHORT).show();
-                                    }).setNegativeButton("Voltar", null).show();
-                            break;
-                        case 1:
-                            new AlertDialog.Builder(this).setTitle("Qualidade de gravação")
-                                .setSingleChoiceItems(new String[]{"720p (menor consumo)", "1080p (mais detalhes)"},
-                                    height == 1080 ? 1 : 0, (d, choice) -> {
-                                        height = choice == 0 ? 720 : 1080;
-                                        preferences.edit().putInt("video_height", height).apply();
-                                        cameraLoop.setHeight(height);
-                                        d.dismiss();
-                                        Toast.makeText(this, "A nova qualidade vale na próxima abertura da câmera", Toast.LENGTH_LONG).show();
-                                    }).setNegativeButton("Voltar", null).show();
-                            break;
-                        case 2:
-                            new AlertDialog.Builder(this)
-                                .setTitle("Duração do lance nesta versão")
-                                .setMessage("Para testar a estabilidade, a gravação após marcar o momento está limitada a 3 minutos. Na versão seguinte, este ajuste oferecerá outras durações e um modo sem limite fixo, com aviso de espaço e bateria.")
-                                .setPositiveButton("Entendi", null).show();
-                            break;
-                        case 3:
-                            useVoice = !useVoice;
-                            preferences.edit().putBoolean("voice", useVoice).apply();
-                            if (useVoice) useVoice = voice.enable(); else voice.disable();
-                            subtitle.setText(useVoice ? "Diga ‘Marcar momento’ para gravar" : "Capture com um toque");
-                            Toast.makeText(this, useVoice ? "Comando por voz ativado para teste" : "Voz desativada",
-                                    Toast.LENGTH_LONG).show();
-                            break;
-                        default:
-                            new AlertDialog.Builder(this).setTitle("Privacidade e limites do teste")
-                                .setMessage("Seus vídeos ficam no aparelho e não são transmitidos. A câmera funciona somente com esta tela aberta. O histórico usa pequenos fragmentos e pode conter lacunas entre eles. Comandos de voz dependem do suporte offline do Android e ainda precisam ser testados com a gravação simultânea. Esta versão não cobra nada.")
-                                .setPositiveButton("Entendi", null).show();
-                    }
-                }).setNegativeButton("Fechar", null).show();
+            .setItems(options, (dialog, index) -> {
+                switch (index) {
+                    case 0:
+                        new AlertDialog.Builder(this).setTitle("Quanto tempo guardar antes?")
+                            .setSingleChoiceItems(new String[]{"15 segundos", "30 segundos", "60 segundos"},
+                                past == 15 ? 0 : past == 30 ? 1 : 2, (d, choice) -> {
+                                    past = new int[]{15,30,60}[choice];
+                                    preferences.edit().putInt("past", past).apply();
+                                    cameraLoop.setPastSeconds(past); d.dismiss(); refreshButtons();
+                                }).setNegativeButton("Voltar", null).show();
+                        break;
+                    case 1: chooseQuality(); break;
+                    case 2:
+                        int[] durations = {3,10,20,30,60,0};
+                        int selected = 1;
+                        for (int i=0; i<durations.length; i++) if (durations[i]==postMinutes) selected=i;
+                        new AlertDialog.Builder(this).setTitle("Duração após marcar")
+                            .setSingleChoiceItems(new String[]{"3 minutos", "10 minutos", "20 minutos", "30 minutos", "60 minutos", "Sem limite fixo"},
+                                selected, (d, choice) -> {
+                                    postMinutes=durations[choice]; cameraLoop.setPostMinutes(postMinutes);
+                                    preferences.edit().putInt("post_minutes",postMinutes).apply();
+                                    d.dismiss(); refreshButtons();
+                                    new AlertDialog.Builder(this).setTitle("Proteção da gravação")
+                                        .setMessage("A captura tentará encerrar e salvar com pouco espaço, bateria em 5% (fora do carregador) ou aquecimento elevado. Sem limite fixo não significa espaço ou bateria infinitos. Mantenha esta tela aberta.")
+                                        .setPositiveButton("Entendi",null).show();
+                                }).setNegativeButton("Voltar",null).show();
+                        break;
+                    case 3:
+                        if (useVoice) { voice.disable(); useVoice=false; }
+                        else useVoice=voice.enable();
+                        preferences.edit().putBoolean("voice",useVoice).apply(); updateVoiceSubtitle();
+                        break;
+                    case 4: editPhrases(); break;
+                    default:
+                        new AlertDialog.Builder(this).setTitle("Privacidade e limites do teste")
+                            .setMessage("Seus vídeos ficam no aparelho, sem transmissão, assinatura ou cobrança. A câmera funciona com esta tela aberta. Ao sair, um lance marcado será finalizado com tentativa de salvamento; o histórico sem marcação é descartado. Fragmentos de ~4 s podem ter lacunas. Voz exige reconhecimento no dispositivo e pode disputar o microfone: use os botões se indisponível. A qualidade depende da câmera e pode cair para um modo compatível.")
+                            .setPositiveButton("Entendi",null).show();
+                }
+            }).setNegativeButton("Fechar",null).show();
+    }
+    private void chooseQuality() {
+        try {
+            CameraManager manager=(CameraManager)getSystemService(CAMERA_SERVICE);
+            List<CameraModes.Mode> modes=CameraModes.detect(manager.getCameraCharacteristics(CameraModes.backCamera(manager)));
+            if (modes.isEmpty()) throw new IllegalStateException("Nenhuma qualidade disponível");
+            String[] labels=new String[modes.size()]; int selected=-1;
+            for(int i=0;i<modes.size();i++) {
+                labels[i]=modes.get(i).label(); if(modes.get(i).key().equals(modeKey)) selected=i;
+            }
+            new AlertDialog.Builder(this).setTitle("Modos informados pela câmera")
+                .setSingleChoiceItems(labels,selected,(d,choice)->{
+                    modeKey=modes.get(choice).key(); preferences.edit().putString("video_mode",modeKey).apply();
+                    cameraLoop.setMode(modeKey);
+                    cameraLoop.shutdown(); cameraLoop.resumeActivity(); cameraLoop.start();
+                    d.dismiss(); Toast.makeText(this,"Qualidade solicitada: "+modes.get(choice).label()+". Se rejeitada, tentaremos um modo inferior.",Toast.LENGTH_LONG).show();
+                }).setNegativeButton("Voltar",null).show();
+        } catch(Exception e) { Toast.makeText(this,"Não foi possível consultar a câmera: "+e.getMessage(),Toast.LENGTH_LONG).show(); }
+    }
+    private void editPhrases() {
+        LinearLayout form=new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(24),dp(12),dp(24),0);
+        form.addView(text("Para marcar o momento",14,BACKGROUND,true));
+        EditText start=new EditText(this); start.setSingleLine(true); start.setText(startPhrase); form.addView(start);
+        form.addView(text("Para encerrar e salvar",14,BACKGROUND,true));
+        EditText stop=new EditText(this); stop.setSingleLine(true); stop.setText(stopPhrase); form.addView(stop);
+        TextView help=text("Diga a frase inteira. Acentos e pontuação são ignorados. As frases ficam apenas neste aparelho.",13,BACKGROUND,false);
+        form.addView(help);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Suas frases de voz").setView(form)
+            .setPositiveButton("Salvar",null).setNegativeButton("Cancelar",null).create();
+        dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{
+            String a=start.getText().toString().trim(),b=stop.getText().toString().trim();
+            try {
+                voice.setPhrases(a,b); startPhrase=a; stopPhrase=b;
+                preferences.edit().putString("start_phrase",a).putString("stop_phrase",b).apply();
+                updateVoiceSubtitle(); dialog.dismiss();
+            } catch(IllegalArgumentException e) { help.setText(e.getMessage()); help.setTextColor(0xFFBB2222); }
+        })); dialog.show();
     }
     @Override protected void onResume() {
         super.onResume();
+        uiHandler.removeCallbacks(uiTick); uiHandler.post(uiTick);
         if (cameraLoop != null && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
                 checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             cameraLoop.resumeActivity(); cameraLoop.start();
@@ -250,6 +359,7 @@ public final class MainActivity extends Activity {
         }
     }
     @Override protected void onPause() {
+        uiHandler.removeCallbacks(uiTick);
         if (voice != null) voice.disable();
         // Não promete funcionamento com tela bloqueada: encerra captura ao sair da tela.
         if (cameraLoop != null) cameraLoop.shutdown();
@@ -258,7 +368,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onBackPressed() {
         new AlertDialog.Builder(this).setTitle("Sair da captura?")
-            .setMessage("Ao sair, o histórico temporário será descartado. Para guardar seu lance, finalize o vídeo primeiro.")
+            .setMessage("Ao sair, um lance marcado será encerrado com tentativa de salvamento. O histórico sem marcação será descartado.")
             .setNegativeButton("Continuar", null)
             .setPositiveButton("Sair", (d,w) -> MainActivity.super.onBackPressed()).show();
     }

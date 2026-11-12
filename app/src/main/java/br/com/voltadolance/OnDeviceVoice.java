@@ -9,9 +9,7 @@ import android.os.Build;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
-import java.text.Normalizer;
 import java.util.ArrayList;
-import java.util.Locale;
 
 /**
  * Experimento local: não usa reconhecedor remoto e não exige INTERNET.
@@ -25,10 +23,12 @@ public final class OnDeviceVoice {
     private SpeechRecognizer recognizer;
     private boolean enabled;
     private boolean capturing;
+    private VoiceCommands commands = new VoiceCommands("Marcar momento", "Encerrar vídeo");
     private final Runnable restart = this::listen;
     public OnDeviceVoice(Activity activity, Callback callback) {
         this.activity = activity; this.callback = callback;
     }
+    public void setPhrases(String start, String stop) { commands = new VoiceCommands(start, stop); }
     public boolean enable() {
         if (enabled) return true;
         if (Build.VERSION.SDK_INT < 31 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(activity)) {
@@ -51,7 +51,8 @@ public final class OnDeviceVoice {
                 consume(results);
                 if (enabled) handler.postDelayed(restart, 500);
             }
-            @Override public void onPartialResults(Bundle partialResults) { consume(partialResults); }
+            // Only final results: partial hypotheses may be retracted or repeated.
+            @Override public void onPartialResults(Bundle partialResults) { }
             @Override public void onEvent(int type, Bundle params) { }
         });
         listen();
@@ -62,29 +63,21 @@ public final class OnDeviceVoice {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR");
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
         intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
         try { recognizer.startListening(intent); capturing = true; }
         catch (Exception e) { capturing = false; handler.postDelayed(restart, 1400); }
     }
-    private long lastCommandAt;
     private void consume(Bundle data) {
-        if (data == null) return;
+        if (!enabled || data == null) return;
         ArrayList<String> texts = data.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         if (texts == null) return;
-        for (String text : texts) {
-            String t = Normalizer.normalize(text.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
-                    .replaceAll("\\p{M}+", "").trim();
-            long now = android.os.SystemClock.elapsedRealtime();
-            if (now - lastCommandAt < 2200) return;
-            if (t.contains("encerrar video") || t.contains("finalizar video") || t.contains("parar video")) {
-                lastCommandAt = now; callback.onFinish(); return;
-            }
-            if (t.contains("marcar momento") || t.contains("guardar lance")) {
-                lastCommandAt = now; callback.onMark(); return;
-            }
-        }
+        if (texts.isEmpty()) return;
+        // Use the best hypothesis, never a lower-confidence alternative.
+        VoiceCommands.Command command = commands.match(texts.get(0));
+        if (command == VoiceCommands.Command.FINISH) callback.onFinish();
+        else if (command == VoiceCommands.Command.MARK) callback.onMark();
     }
     public void disable() {
         enabled = false;
