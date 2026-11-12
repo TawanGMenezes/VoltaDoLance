@@ -2,7 +2,7 @@ name: Build Android APK de teste
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, alpha-0.2 ]
+    branches: [ main, master, alpha-0.2, fix-continuous-voice ]
   pull_request:
 jobs:
   build:
