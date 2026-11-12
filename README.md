@@ -1,4 +1,4 @@
-# Volta do Lance — alpha 0.2
+# Volta do Lance — alpha 0.2.1
 
 App Android independente, com nome, cores e textos próprios. Sem assinatura, cobrança, conta, anúncios ou envio de vídeos. Permissões: câmera e microfone; sem INTERNET.
 
@@ -21,11 +21,11 @@ Voz é experimental, opcional e exclusivamente no dispositivo (Android 12+ com m
 
 ## APK pelo GitHub Actions
 
-Acesse [Actions](https://github.com/TawanGMenezes/VoltaDoLance/actions), escolha a execução mais recente bem-sucedida da branch `alpha-0.2`, e baixe **VoltaDoLance-debug-apk** em **Artifacts** (requer login no GitHub). Extraia `app-debug.apk` do ZIP e abra no celular.
+Acesse [Actions](https://github.com/TawanGMenezes/VoltaDoLance/actions), escolha a execução mais recente bem-sucedida da branch `main`, e baixe **VoltaDoLance-debug-apk** em **Artifacts** (requer login no GitHub). Extraia `app-debug.apk` do ZIP e abra no celular.
 
-O workflow executa todos os testes JVM/Robolectric, monta o APK debug e verifica assinatura e versão. Relatórios ficam no artefato **VoltaDoLance-test-results**. Ferramentas usadas: Java 17, Gradle 8.13, SDK/build-tools 36, AGP 8.12.2. Versão do app: `0.2.0-alpha`, código `2`, pacote `br.com.voltadolance.dev`.
+O workflow executa todos os testes JVM/Robolectric, monta o APK debug, verifica assinatura e versão e testa instalação limpa, reinstalação e abertura em um emulador Android 15. Após aprovação na main, publica também o arquivo APK diretamente em Releases (pré-lançamento), para baixar sem extrair ZIP. Relatórios ficam no artefato **VoltaDoLance-test-results**. Ferramentas usadas: Java 17, Gradle 8.13, SDK/build-tools 36, AGP 8.12.2. Versão do app: `0.2.1-alpha`, código `3`, pacote `br.com.voltadolance.dev`.
 
-A assinatura debug é de testes. Se o Android recusar atualização por assinatura diferente, faça cópia dos vídeos antes de remover a versão antiga. Não use este build para distribuição comercial.
+A assinatura debug é de testes e o Actions conserva a chave de teste no cache entre builds enquanto esse cache estiver disponível. Se o Android recusar atualização por assinatura diferente, faça cópia dos vídeos antes de remover a versão antiga. Não use este build para distribuição comercial.
 
 ## Validação em aparelho ainda necessária
 
