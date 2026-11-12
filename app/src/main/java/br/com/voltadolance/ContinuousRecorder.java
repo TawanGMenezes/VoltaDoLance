@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.media.*;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Bundle;
 import android.view.Surface;
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -116,7 +117,8 @@ public final class ContinuousRecorder {
     public boolean mark(int pastSeconds) {
         synchronized(state) {
             if(!started || stopping || closed || !readySent.get()) return false;
-            return packets.mark(pastSeconds);
+            try {return packets.mark(pastSeconds);}
+            catch(RuntimeException e) {fail(e); return false;}
         }
     }
     public void setPastSeconds(int seconds) {
@@ -143,6 +145,7 @@ public final class ContinuousRecorder {
     }
     private void drain(MediaCodec codec,boolean isVideo) {
         MediaCodec.BufferInfo info=new MediaCodec.BufferInfo();
+        long firstVideoPts=Long.MIN_VALUE,lastKeyPts=Long.MIN_VALUE,lastSyncRequestNs=System.nanoTime();
         try {
             while(!aborting) {
                 int index=codec.dequeueOutputBuffer(info,10000);
@@ -152,6 +155,21 @@ public final class ContinuousRecorder {
                 } else if(index>=0) {
                     try {
                         if(info.size>0 && (info.flags&MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0) {
+                            if(isVideo) {
+                                if(firstVideoPts==Long.MIN_VALUE) firstVideoPts=info.presentationTimeUs;
+                                if((info.flags&MediaCodec.BUFFER_FLAG_KEY_FRAME)!=0) lastKeyPts=info.presentationTimeUs;
+                                if(lastKeyPts==Long.MIN_VALUE && info.presentationTimeUs-firstVideoPts>5_000_000L)
+                                    throw new IOException("Encoder não produziu quadro-chave inicial");
+                                long now=System.nanoTime();
+                                if(!stopping && now-lastSyncRequestNs>=1_000_000_000L
+                                        && (lastKeyPts==Long.MIN_VALUE || info.presentationTimeUs-lastKeyPts>=1_000_000L)) {
+                                    Bundle request=new Bundle();
+                                    request.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME,0);
+                                    // Some vendor encoders reject explicit requests; the GOP watchdog remains authoritative.
+                                    try {codec.setParameters(request);} catch(IllegalArgumentException ignored) { }
+                                    lastSyncRequestNs=now;
+                                }
+                            }
                             ByteBuffer data=codec.getOutputBuffer(index);
                             if(data==null) throw new IOException("Encoder output unavailable");
                             data.position(info.offset); data.limit(info.offset+info.size);

@@ -58,6 +58,9 @@ final class EncodedPacketStore implements Closeable {
         boolean key=video && (flags&1)!=0;
         if(gops.isEmpty() && !key) return; // Never retain undecodable startup frames.
         if(pinnedStart!=Long.MIN_VALUE && ptsUs<pinnedStart) return;
+        if(video && !key && pinnedStart==Long.MIN_VALUE
+                && ptsUs-gops.get(gops.size()-1).start>5_000_000L)
+            throw new IOException("Encoder sem quadro-chave por 5 segundos; histórico pausado");
         if(video) newestVideo=Math.max(newestVideo,ptsUs);
         // Evict before allocating the next GOP, including at the disk cap boundary.
         evict();

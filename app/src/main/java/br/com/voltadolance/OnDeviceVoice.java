@@ -13,12 +13,9 @@ import java.io.InputStream;
 import java.io.InterruptedIOException;
 import org.json.JSONObject;
 import org.json.JSONArray;
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
+import com.sun.jna.Function;
+import com.sun.jna.NativeLibrary;
+import com.sun.jna.Native;
 import org.vosk.Model;
 import org.vosk.Recognizer;
 
@@ -30,7 +27,7 @@ public final class OnDeviceVoice implements AutoCloseable {
         void onUnavailable();
         default void onState(String state) { }
     }
-    private static final Object MODEL_FILES_LOCK = new Object();
+
     private final Context context;
     private final Callback callback;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -129,7 +126,7 @@ public final class OnDeviceVoice implements AutoCloseable {
                     if (activeSession != current) {
                         closeRecognizer(recognizer);
                         recognizer = null;
-                        String grammar = commandGrammar(modelDirectory, utterances.grammarPhrases());
+                        String grammar = commandGrammar(model, utterances.grammarPhrases());
                         recognizer = new Recognizer(model, 16000.0f, grammar);
                         activeSession = current;
                         listening = false;
@@ -192,38 +189,22 @@ public final class OnDeviceVoice implements AutoCloseable {
         }
     }
 
-    /** Resolve only configured words, keeping memory bounded instead of retaining the dictionary. */
-    private static String commandGrammar(File modelDirectory, String[] phrases) throws IOException {
-        Map<String, String> resolved = new HashMap<>();
-        for (String phrase : phrases) {
-            if (phrase.equals("[unk]")) continue;
-            for (String word : phrase.split(" ")) resolved.put(word, null);
-        }
-        File dictionary = new File(modelDirectory, "words.txt");
-        if (!dictionary.isFile()) dictionary = new File(modelDirectory, "graph/words.txt");
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                new FileInputStream(dictionary), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                int separator = line.indexOf(' ');
-                if (separator < 0) separator = line.indexOf('\t');
-                String symbol = separator < 0 ? line : line.substring(0, separator);
-                for (Map.Entry<String, String> requested : resolved.entrySet()) {
-                    if (symbol.equals(requested.getKey())) requested.setValue(symbol);
-                    else if (requested.getValue() == null
-                            && VoiceCommands.normalize(symbol).equals(VoiceCommands.normalize(requested.getKey())))
-                        requested.setValue(symbol);
-                }
-            }
-        }
+    /** The legacy model embeds word symbols inside its FSTs; it has no words.txt. */
+    private static String commandGrammar(Model model, String[] phrases) throws IOException {
+        // Official C API; the Java Model wrapper does not expose this operation.
+        Function findWord = NativeLibrary.getInstance("vosk").getFunction("vosk_model_find_word");
         JSONArray grammar = new JSONArray();
         for (String phrase : phrases) {
             if (phrase.equals("[unk]")) { grammar.put(phrase); continue; }
             StringBuilder mapped = new StringBuilder();
             for (String word : phrase.split(" ")) {
-                String symbol = resolved.get(word);
-                if (symbol == null) throw new IOException("Palavra fora do modelo local: “" + word
-                        + "”. Escolha outra frase nas configurações");
+                String symbol = word;
+                if (findWord.invokeInt(new Object[]{model.getPointer(), Native.toByteArray(symbol, "UTF-8")}) < 0) {
+                    symbol = VoiceCommands.normalize(word);
+                    if (findWord.invokeInt(new Object[]{model.getPointer(), Native.toByteArray(symbol, "UTF-8")}) < 0)
+                        throw new IOException("Palavra fora do modelo local: “" + word
+                                + "”. Escolha outra frase nas configurações");
+                }
                 if (mapped.length() > 0) mapped.append(' ');
                 mapped.append(symbol);
             }
@@ -231,32 +212,16 @@ public final class OnDeviceVoice implements AutoCloseable {
         }
         return grammar.toString();
     }
-
     private static void closeRecognizer(Recognizer recognizer) {
         if (recognizer != null) {
             try { recognizer.close(); } catch (RuntimeException | LinkageError ignored) { }
         }
     }
 
-    /** Atomic private cache: an interrupted extraction is never mistaken for a model. */
     private File extractModel() throws IOException {
-        synchronized (MODEL_FILES_LOCK) {
-            File destination = new File(context.getFilesDir(), "vosk-small-pt-0.3");
-            if (new File(destination, ".complete").isFile()
-                    && (new File(destination, "final.mdl").isFile()
-                    || new File(destination, "am/final.mdl").isFile())) return destination;
-            File staging = new File(context.getFilesDir(), "vosk-small-pt-0.3.partial");
-            deleteTree(staging);
-            copyAssets(context.getAssets(), "model-pt", staging);
-            try (FileOutputStream marker = new FileOutputStream(new File(staging, ".complete"))) {
-                marker.write(1);
-            }
-            deleteTree(destination);
-            if (!staging.renameTo(destination)) throw new IOException("Não foi possível preparar o modelo de voz");
-            return destination;
-        }
+        return VoiceModelFiles.prepare(context.getFilesDir(),
+                staging -> copyAssets(context.getAssets(), "model-pt", staging));
     }
-
     private void copyAssets(AssetManager assets, String assetPath, File output) throws IOException {
         if (closed || Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Voz encerrada");
         String[] children = assets.list(assetPath);
@@ -275,9 +240,4 @@ public final class OnDeviceVoice implements AutoCloseable {
         }
     }
 
-    private static void deleteTree(File file) throws IOException {
-        File[] children = file.listFiles();
-        if (children != null) for (File child : children) deleteTree(child);
-        if (file.exists() && !file.delete()) throw new IOException("Não foi possível limpar " + file);
-    }
 }

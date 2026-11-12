@@ -8,6 +8,14 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class EncodedPacketStoreTest {
+    @Test public void missingKeyframesStopUnmarkedHistoryBeforeItCanGrowWithoutBound() throws Exception {
+        EncodedPacketStore s=store();
+        try {
+            video(s,0,true); video(s,4_999_999L,false);
+            try {video(s,5_000_001L,false); fail("Expected missing-keyframe protection");}
+            catch(java.io.IOException expected) {assertEquals(6,s.bytesOnDisk());}
+        } finally {s.close();}
+    }
     @Test public void sixHoursWithoutMarkStillRetainsOnlyThirtySeconds() throws Exception {
         java.io.File folder=java.nio.file.Files.createTempDirectory("bounded-history").toFile();
         try(EncodedPacketStore store=new EncodedPacketStore(folder,30,16)) {
