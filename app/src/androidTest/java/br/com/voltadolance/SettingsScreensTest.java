@@ -22,6 +22,9 @@ public class SettingsScreensTest {
             FileInputStream input=new FileInputStream(fd.getFileDescriptor())){byte[] bytes=new byte[4096];while(input.read(bytes)!=-1){} }
     }
     static void screenshot(String name)throws Exception{
+        // Google APIs emulator's Pixel Launcher can leave its own ANR dialog over
+        // the foreground app. Stop only that unrelated launcher, never the app under test.
+        shell("am force-stop com.google.android.apps.nexuslauncher");
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();SystemClock.sleep(500);
         shell("mkdir -p /sdcard/Download/lancevivo-qa");shell("screencap -p /sdcard/Download/lancevivo-qa/"+name+".png");
     }
