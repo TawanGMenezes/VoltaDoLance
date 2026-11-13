@@ -8,6 +8,16 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class EncodedPacketStoreTest {
+    @Test public void fifteenSecondWindowKeepsPrecedingGopWhenEncoderUsesFourSecondKeys() throws Exception {
+        try(EncodedPacketStore s=new EncodedPacketStore(Files.createTempDirectory("gop-margin").toFile(),15,1024)) {
+            for(int second=0;second<=18;second++)video(s,second*1_000_000L,second%4==0);
+            assertEquals(0,s.snapshot().get(0).ptsUs);
+            assertEquals(18_000_000L,s.snapshot().get(s.snapshot().size()-1).ptsUs);
+            video(s,19_000_000L,false);
+            assertEquals(4_000_000L,s.snapshot().get(0).ptsUs);
+            assertEquals(19_000_000L,s.snapshot().get(s.snapshot().size()-1).ptsUs);
+        }
+    }
     @Test public void missingKeyframesStopUnmarkedHistoryBeforeItCanGrowWithoutBound() throws Exception {
         EncodedPacketStore s=store();
         try {

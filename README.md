@@ -38,6 +38,6 @@ O reconhecedor é local e o modelo português tem tamanho fixo no APK/armazename
 
 Use [Releases](https://github.com/TawanGMenezes/VoltaDoLance/releases) para baixar o `.apk` diretamente. O Actions da main publica uma pré-versão somente após testes JVM/UI, assinatura/alinhamento, instalação/reinstalação e teste Android com Camera2/AVC/AAC e fala sintética em português.
 
-Versão `0.3.0-alpha`, código `4`, pacote `br.com.voltadolance.dev`. Java 17, Gradle 8.13, SDK36, AGP8.12.2. Assinatura debug preservada no cache enquanto disponível; não é distribuição comercial. Modelo português Vosk small pt0.3 e Vosk API: Apache2; JNA distribuído sob Apache2. Atribuições/licenças incluídas no APK.
+Versão `0.4.0-alpha`, código `5`, pacote `br.com.voltadolance.dev`. Java 17, Gradle 8.13, SDK36, AGP8.12.2. Assinatura debug preservada no cache enquanto disponível; não é distribuição comercial. Modelo português Vosk small pt0.3 e Vosk API: Apache2; JNA distribuído sob Apache2. Atribuições/licenças incluídas no APK.
 
 Ainda é necessário testar no OPPO real: comandos com a própria voz e frases escolhidas; vento/ruído; bips e volume; orientação e áudio; fluidez nos modos oferecidos; eventos longos, pausas/retomadas e espaço disponível. Testes de emulador não garantem funcionamento em todos os aparelhos.

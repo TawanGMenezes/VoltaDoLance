@@ -80,7 +80,14 @@ public class ContinuousVoiceTest {
         Method method=packets.getClass().getDeclaredMethod("snapshot");method.setAccessible(true);
         List<?> samples=(List<?>)method.invoke(packets);
         assertFalse(samples.isEmpty());
-        return new long[]{(Long)field(samples.get(0),"ptsUs"),(Long)field(samples.get(samples.size()-1),"ptsUs")};
+        long first=Long.MAX_VALUE,last=Long.MIN_VALUE,audioLast=Long.MIN_VALUE;
+        for(Object sample:samples){long pts=(Long)field(sample,"ptsUs");
+            if((Boolean)field(sample,"video")){first=Math.min(first,pts);last=Math.max(last,pts);}
+            else audioLast=Math.max(audioLast,pts);
+        }
+        assertTrue("history has no video samples",first!=Long.MAX_VALUE);
+        android.util.Log.i("HistoryBounds","videoSpanUs="+(last-first)+" audioAheadUs="+(audioLast-last));
+        return new long[]{first,last};
     }
     @Test public void actualPortugueseSpeechDrivesRecAndSaveAcrossContinuousHistory() throws Exception {
         Context target=InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -115,7 +122,10 @@ public class ContinuousVoiceTest {
             ambientSilence(decoder,20000);
             long[] retained=historyBounds(engine);
             assertTrue("unmarked history retained old startup video",retained[0]>initialStart+2_000_000);
-            assertTrue("unmarked history grew beyond selected window",retained[1]-retained[0]<17_000_000);
+            // Keep the preceding independently decodable GOP. One second is requested,
+            // not guaranteed by MediaCodec; the store's enforced GOP watchdog is 5 s.
+            // Compare the video track, not an AAC packet drained ahead of video.
+            assertTrue("history exceeded 15 s plus maximum 5 s GOP: "+(retained[1]-retained[0]),retained[1]-retained[0]<=20_000_000);
             speech(decoder,"start.pcm");
             await("Spoken custom start did not show REC",()->ui(a->((CameraLoop)field(a,"cameraLoop")).state().isRecording()),15000);
             assertTrue(ui(a->((TextView)a.findViewById(R.id.rec_indicator)).getText().toString().startsWith("REC ")));
