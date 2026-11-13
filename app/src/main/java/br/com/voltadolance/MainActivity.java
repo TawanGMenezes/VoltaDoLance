@@ -101,6 +101,7 @@ public final class MainActivity extends ThemedActivity {
                 stateLabel.setText(message);
                 if(pendingVoiceRestart&&cameraLoop.state().canMark()){
                     pendingVoiceRestart=false;
+                    modeKey=cameraLoop.selectedMode();facing=cameraLoop.facing();
                     if(foreground&&!navigating&&useVoice)voice.enable();
                 }
                 refreshButtons();
@@ -259,7 +260,7 @@ public final class MainActivity extends ThemedActivity {
         cameraSwitchButton.setEnabled(!active&&!exporting&&!pendingVoiceRestart&&state.phase()!=CaptureState.Phase.PREPARING);
         cameraSwitchButton.setAlpha(cameraSwitchButton.isEnabled()?1f:0.45f);
         cameraSwitchButton.setContentDescription(cameraLoop.facing()==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?"Trocar para câmera traseira":"Trocar para câmera frontal");
-        pauseButton.setEnabled(!active && !exporting && cameraLoop.isRunning());
+        pauseButton.setEnabled(!active && !exporting && !pendingVoiceRestart && cameraLoop.isRunning());
         pauseButton.setAlpha(pauseButton.isEnabled() ? 1f : 0.45f);
         settingsButton.setAlpha(settingsButton.isEnabled() ? 1f : 0.45f);
         galleryButton.setAlpha(galleryButton.isEnabled() ? 1f : 0.45f);

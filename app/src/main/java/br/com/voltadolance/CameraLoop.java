@@ -37,6 +37,8 @@ public final class CameraLoop {
     private long maxEventMs=600000;
     private boolean running,closing,activityActive=true,safetyPaused,manualPaused,disposed;
     private String requestedMode="1280x720@30",cameraId,safetyNotice="";
+    private Integer rollbackFacing;
+    private String rollbackMode;
     private List<CameraModes.Mode> modes=Collections.emptyList();
 
     public CameraLoop(Activity activity,TextureView preview,Listener listener) {
@@ -48,9 +50,10 @@ public final class CameraLoop {
     public void setFacing(int value) {if(!running&&!isCapturing())facing=value==CameraCharacteristics.LENS_FACING_FRONT?value:CameraCharacteristics.LENS_FACING_BACK;}
     public int facing() {return facing;}
     public String lensLabel(){return facing==CameraCharacteristics.LENS_FACING_FRONT?"Frontal":"Traseira";}
-    public String selectedMode(){return modes.isEmpty()?requestedMode:modes.get(modeIndex).key();}
+    public String selectedMode(){return modeIndex<0||modeIndex>=modes.size()?requestedMode:modes.get(modeIndex).key();}
+    private void persistSelection(){activity.getSharedPreferences("local_settings",0).edit().putInt("camera_facing",facing).putString("video_mode",selectedMode()).apply();}
     public boolean switchCamera() {
-        if(isCapturing()||closing||disposed)return false;
+        if(isCapturing()||closing||disposed||rollbackFacing!=null)return false;
         try{
             int destination=facing==CameraCharacteristics.LENS_FACING_BACK?CameraCharacteristics.LENS_FACING_FRONT:CameraCharacteristics.LENS_FACING_BACK;
             CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
@@ -58,10 +61,11 @@ public final class CameraLoop {
             List<CameraModes.Mode> supported=CameraModes.detect(manager.getCameraCharacteristics(target));
             int selected=CameraModes.chooseModeIndex(supported,selectedMode());
             if(selected<0)throw new IllegalStateException("Nenhum modo de vídeo compatível nesta câmera");
+            int previous=facing;String previousMode=selectedMode();
             stopBuffer();facing=destination;requestedMode=supported.get(selected).key();modes=supported;modeIndex=selected;
-            activity.getSharedPreferences("local_settings",0).edit().putInt("camera_facing",facing).putString("video_mode",requestedMode).apply();
             preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);
-            if(manualPaused){state.stopped();status(lensLabel()+" selecionada • "+modeLabel()+" • histórico pausado");}else start();
+            if(manualPaused){persistSelection();state.stopped();status(lensLabel()+" selecionada • "+modeLabel()+" • histórico pausado");}
+            else{rollbackFacing=previous;rollbackMode=previousMode;start();}
             return true;
         }catch(Exception e){listener.onError("Não foi possível trocar: "+e.getMessage());return false;}
     }
@@ -72,7 +76,7 @@ public final class CameraLoop {
     public boolean isCapturing() { return state.isRecording() || state.isSaving(); }
     public boolean isRunning() { return running; }
     public String completionReason() { return safetyNotice; }
-    public String modeLabel() { return modes.isEmpty()?"Detectando câmera":modes.get(modeIndex).label(); }
+    public String modeLabel() { return modeIndex<0||modeIndex>=modes.size()?"Modo indisponível":modes.get(modeIndex).label(); }
     private void status(String text) { listener.onStatus(text); }
 
     public void start() {
@@ -113,7 +117,7 @@ public final class CameraLoop {
                 ContinuousRecorder prepared=new ContinuousRecorder(activity,mode,orientation,pastSeconds,new ContinuousRecorder.Listener() {
                     public void onPcm(byte[] pcm,int length) { listener.onPcm(pcm,length); }
                     public void onReady() {
-                        main.post(()->{ if(current(token)) { state.ready(); status(lensLabel()+" • "+mode.label()+" • histórico de até "+pastSeconds+" s"); } });
+                        main.post(()->{ if(current(token)) { if(rollbackFacing!=null){persistSelection();rollbackFacing=null;rollbackMode=null;}state.ready(); status(lensLabel()+" • "+mode.label()+" • histórico de até "+pastSeconds+" s"); } });
                     }
                     public void onError(String message) { main.post(()->{ if(current(token)) fail(message); }); }
                 });
@@ -208,7 +212,7 @@ public final class CameraLoop {
     };
     private String unsafeReason() {
         long bytes=recorder==null?0:recorder.bytesOnDisk();
-        long futureBytes=modes.isEmpty()?4_000_000:(modes.get(modeIndex).bitrate()/8L+12000)*4;
+        long futureBytes=modeIndex<0||modeIndex>=modes.size()?4_000_000:(modes.get(modeIndex).bitrate()/8L+12000)*4;
         long free=Math.min(activity.getCacheDir().getUsableSpace(),Environment.getExternalStorageDirectory().getUsableSpace());
         if(CaptureSafety.lowSpace(free,bytes,futureBytes)) return "Pouco espaço livre para salvar o lance";
         Intent battery=activity.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -237,7 +241,14 @@ public final class CameraLoop {
     private void error(String message) { state.error(); listener.onError(message); }
     private void fail(String message) {
         if(state.isRecording()) { safetyPaused=true; safetyNotice=message; finishAndSave(); return; }
+        if(restorePreviousCamera(message))return;
         stopBuffer(); error(message);
+    }
+    private boolean restorePreviousCamera(String reason){
+        if(rollbackFacing==null)return false;
+        stopBuffer();facing=rollbackFacing;requestedMode=rollbackMode;rollbackFacing=null;rollbackMode=null;modes=Collections.emptyList();modeIndex=0;
+        persistSelection();preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);state.stopped();status(reason+" • voltando à câmera "+lensLabel().toLowerCase(Locale.ROOT));
+        if(activityActive&&!manualPaused&&!disposed)start();return true;
     }
     public void pauseHistory() {
         if(isCapturing()) return;
@@ -246,6 +257,7 @@ public final class CameraLoop {
     public void resumeCapture() { manualPaused=false; safetyPaused=false; activityActive=true; start(); }
     public void shutdown() {
         activityActive=false;
+        if(restorePreviousCamera("Troca interrompida"))return;
         if(state.isRecording()) { finishAndSave(); return; }
         if(state.isSaving()) return;
         stopBuffer(); state.stopped();
