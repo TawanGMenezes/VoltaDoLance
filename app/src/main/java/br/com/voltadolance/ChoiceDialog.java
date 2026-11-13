@@ -22,7 +22,7 @@ final class ChoiceDialog {
         LinearLayout body=new LinearLayout(a);body.setOrientation(1);body.setPadding(dp(a,20),dp(a,24),dp(a,20),dp(a,16));body.setBackground(card(a,p.surface,0,24));
         TextView heading=new TextView(a);heading.setText(title);heading.setTextSize(22);heading.setTextColor(p.text);heading.setTypeface(Typeface.DEFAULT,Typeface.BOLD);heading.setPadding(dp(a,4),0,dp(a,4),dp(a,6));body.addView(heading);
         TextView hint=new TextView(a);hint.setText("Escolha uma opção");hint.setTextSize(14);hint.setTextColor(p.secondary);hint.setPadding(dp(a,4),0,0,dp(a,18));body.addView(hint);
-        ScrollView scroll=new ScrollView(a){@Override protected void onMeasure(int w,int h){int max=(int)(getResources().getDisplayMetrics().heightPixels*0.55f);super.onMeasure(w,View.MeasureSpec.makeMeasureSpec(max,View.MeasureSpec.AT_MOST));}};
+        ScrollView scroll=new ScrollView(a){@Override protected void onMeasure(int w,int h){int max=(int)(getResources().getDisplayMetrics().heightPixels*0.55f);if(View.MeasureSpec.getMode(h)!=View.MeasureSpec.UNSPECIFIED)max=Math.min(max,View.MeasureSpec.getSize(h));super.onMeasure(w,View.MeasureSpec.makeMeasureSpec(max,View.MeasureSpec.AT_MOST));}};
         LinearLayout choices=new LinearLayout(a);choices.setOrientation(1);scroll.addView(choices);body.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
         for(int i=0;i<options.length;i++){
             final int index=i;boolean checked=i==selected;LinearLayout row=new LinearLayout(a);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(a,12),dp(a,12),dp(a,16),dp(a,12));row.setMinimumHeight(dp(a,60));

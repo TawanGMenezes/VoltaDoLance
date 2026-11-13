@@ -152,4 +152,3 @@ public final class SettingsActivity extends ThemedActivity {
     private void goBack(){if(page.equals("home"))finish();else{draftStart=null;draftStop=null;startInput=null;stopInput=null;show("home");}}
     @Override public void onBackPressed(){goBack();}
 }
-

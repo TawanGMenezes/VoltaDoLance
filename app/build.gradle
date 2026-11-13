@@ -66,4 +66,3 @@ tasks.register('preparePortugueseModel') {
     }
 }
 tasks.named('preBuild').configure { dependsOn 'preparePortugueseModel' }
-

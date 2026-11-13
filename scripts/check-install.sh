@@ -27,4 +27,3 @@ if grep -q "Process: $package" install-results/crashes.txt; then
   exit 1
 fi
 adb exec-out screencap -p > install-results/first-launch.png
-

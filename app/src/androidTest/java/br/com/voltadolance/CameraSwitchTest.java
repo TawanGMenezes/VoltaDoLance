@@ -38,6 +38,12 @@ public class CameraSwitchTest {
    ui(a->{a.findViewById(R.id.mark_moment).performClick();assertTrue(loop(a).state().isRecording());assertFalse(a.findViewById(R.id.camera_switch).isEnabled());assertFalse(loop(a).switchCamera());assertEquals(CameraCharacteristics.LENS_FACING_FRONT,loop(a).facing());return null;});
    Thread.sleep(2000);ui(a->{a.findViewById(R.id.finish_save).performClick();assertFalse(loop(a).switchCamera());return null;});
    await("Front video was not saved",()->newest(c)>before);await("Front history did not resume",()->ui(a->loop(a).state().canMark()));
+   CameraManager manager=(CameraManager)c.getSystemService(Context.CAMERA_SERVICE);int angle=manager.getCameraCharacteristics(CameraModes.cameraForFacing(manager,CameraCharacteristics.LENS_FACING_FRONT)).get(CameraCharacteristics.SENSOR_ORIENTATION);
+   try(android.media.MediaMetadataRetriever video=new android.media.MediaMetadataRetriever()){
+    video.setDataSource(c,ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,newest(c)));
+    assertEquals(angle,Integer.parseInt(video.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)));
+    assertTrue(Long.parseLong(video.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION))>0);
+   }
    ui(a->{loop(a).pauseHistory();a.findViewById(R.id.camera_switch).setEnabled(true);a.findViewById(R.id.camera_switch).performClick();assertTrue(loop(a).isManuallyPaused());assertFalse(loop(a).isRunning());assertEquals(CameraCharacteristics.LENS_FACING_BACK,loop(a).facing());return null;});
    assertEquals(CameraCharacteristics.LENS_FACING_BACK,c.getSharedPreferences("local_settings",0).getInt("camera_facing",-1));
   }finally{scenario.close();}
