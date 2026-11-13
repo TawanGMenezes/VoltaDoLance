@@ -25,21 +25,22 @@ import java.util.concurrent.Executors;
 import java.text.DateFormat;
 import java.util.Date;
 
-public final class GalleryActivity extends Activity {
+public final class GalleryActivity extends ThemedActivity {
     private final ExecutorService thumbnails = Executors.newSingleThreadExecutor();
     private final CancellationSignal cancellation = new CancellationSignal();
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private TextView label(String value, int size) {
         TextView view = new TextView(this); view.setText(value); view.setTextSize(size);
-        view.setTextColor(Color.WHITE); view.setPadding(24, 22, 24, 22); return view;
+        view.setTextColor(palette.text); view.setPadding(dp(16), dp(14), dp(16), dp(14)); return view;
     }
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(0xFF091E2C);
+        ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(palette.surface);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(12, 32, 12, 20);
-        TextView title = label("Momentos guardados", 26);
+        list.setPadding(dp(12), dp(12), dp(12), dp(20));
+        TextView title = label("‹  Seus lances", 26);
+        title.setContentDescription("Seus lances. Voltar à câmera");title.setMinimumHeight(dp(56));
         title.setOnClickListener(v -> finish());
         list.addView(title);
         String[] projection = {MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
@@ -62,10 +63,10 @@ public final class GalleryActivity extends Activity {
                     FrameLayout frame = new FrameLayout(this);
                     ImageView thumbnail = new ImageView(this);
                     thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    thumbnail.setBackgroundColor(0xFF254257);
+                    thumbnail.setBackgroundColor(palette.tint);
                     thumbnail.setContentDescription("Miniatura do vídeo " + name);
                     frame.addView(thumbnail, new FrameLayout.LayoutParams(-1,-1));
-                    TextView play = label("▶",24); play.setGravity(Gravity.CENTER);
+                    TextView play = label("▶",24); play.setGravity(Gravity.CENTER);play.setTextColor(Color.WHITE);
                     play.setPadding(0,0,0,0); play.setBackgroundColor(0x44000000);
                     frame.addView(play,new FrameLayout.LayoutParams(-1,-1));
                     row.addView(frame,new LinearLayout.LayoutParams(dp(96),dp(64)));
@@ -90,7 +91,7 @@ public final class GalleryActivity extends Activity {
                             });
                         } catch (Exception ignored) { /* Playback icon remains if thumbnail unavailable. */ }
                     });
-                    View line = new View(this); line.setBackgroundColor(0xFF355164);
+                    View line = new View(this); line.setBackgroundColor(palette.line);
                     list.addView(line, new LinearLayout.LayoutParams(-1, 1));
                     count++;
                 }
@@ -102,6 +103,7 @@ public final class GalleryActivity extends Activity {
             TextView empty = label("Ainda não há lances guardados.\n\nVolte à câmera, marque um momento e finalize a gravação.", 16);
             empty.setGravity(Gravity.CENTER);
             list.addView(empty);
+            android.widget.Button back=new android.widget.Button(this);back.setText("Voltar à câmera");back.setAllCaps(false);back.setTextColor(palette.text);back.setOnClickListener(v->finish());list.addView(back);
         }
         scroll.addView(list); setContentView(scroll);
     }

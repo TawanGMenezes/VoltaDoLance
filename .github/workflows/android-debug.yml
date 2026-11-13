@@ -96,9 +96,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          BUILD_TAG: alpha-0.3.0-${{ github.run_number }}-${{ github.run_attempt }}
+          BUILD_TAG: alpha-0.4.0-${{ github.run_number }}-${{ github.run_attempt }}
           BUILD_SHA: ${{ github.sha }}
         run: |
-          mv apk/app-debug.apk apk/VoltaDoLance-0.3.0-alpha.apk
-          gh release create "$BUILD_TAG" apk/VoltaDoLance-0.3.0-alpha.apk --target "$BUILD_SHA" --prerelease --title "Volta do Lance 0.3.0 alpha" --notes "Captura continua com historico limitado, voz offline no mesmo microfone e bips de inicio/fim. Testes de instalacao, Camera2/AVC/AAC e fala sintetica em portugues no Android 15. Validacao no OPPO real ainda necessaria. Sem assinaturas ou cobrancas."
+          mv apk/app-debug.apk apk/LanceVivo-0.4.0-alpha.apk
+          gh release create "$BUILD_TAG" apk/LanceVivo-0.4.0-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.4.0 alpha" --notes "Identidade LanceVivo, configuracoes organizadas, temas claro/escuro/sistema, aceite dos termos do teste e demonstracao de planos sem cobranca. Captura continua e voz offline preservadas. Validacao fisica no OPPO ainda necessaria."
+
 

@@ -15,6 +15,7 @@ import org.robolectric.shadows.ShadowSystemClock;
 import android.os.Looper;
 import static org.robolectric.Shadows.shadowOf;
 import org.junit.Test;
+import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
@@ -26,20 +27,18 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35)
 public class MainActivityTest {
+    @Before public void acceptAlphaNotice(){AlphaNotice.accept(org.robolectric.RuntimeEnvironment.getApplication());}
     private static void editTexts(View view,List<EditText> result) {
         if(view instanceof EditText) result.add((EditText)view);
         if(view instanceof ViewGroup) for(int i=0;i<((ViewGroup)view).getChildCount();i++) editTexts(((ViewGroup)view).getChildAt(i),result);
     }
     @Test public void editedPortuguesePhrasesPersistAcrossActivityRecreation() throws Exception {
         MainActivity activity=Robolectric.buildActivity(MainActivity.class).create().get();
-        Method edit=MainActivity.class.getDeclaredMethod("editPhrases"); edit.setAccessible(true); edit.invoke(activity);
-        // Dialog dispatches onShow asynchronously; allow its button handler to attach.
-        shadowOf(Looper.getMainLooper()).idle();
-        AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog();
-        List<EditText> inputs=new ArrayList<>(); editTexts(dialog.getWindow().getDecorView(),inputs);
-        assertEquals(2,inputs.size());
-        inputs.get(0).setText("Peixe na linha"); inputs.get(1).setText("Pode salvar");
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        SettingsActivity settings=Robolectric.buildActivity(SettingsActivity.class).setup().get();
+        settings.findViewById(R.id.voice_setting).performClick();
+        ((EditText)settings.findViewById(R.id.start_phrase)).setText("Peixe na linha");
+        ((EditText)settings.findViewById(R.id.stop_phrase)).setText("Pode salvar");
+        settings.findViewById(R.id.save_phrases).performClick();
         assertEquals("Peixe na linha",activity.getSharedPreferences("local_settings",0).getString("start_phrase",null));
         assertEquals("Pode salvar",activity.getSharedPreferences("local_settings",0).getString("stop_phrase",null));
         MainActivity recreated=Robolectric.buildActivity(MainActivity.class).create().get();

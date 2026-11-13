@@ -2,4 +2,17 @@
     <item name="mark_moment" type="id" />
     <item name="finish_save" type="id" />
     <item name="rec_indicator" type="id" />
+    <item name="settings_button" type="id" />
+    <item name="appearance_setting" type="id" />
+    <item name="voice_setting" type="id" />
+    <item name="start_phrase" type="id" />
+    <item name="stop_phrase" type="id" />
+    <item name="save_phrases" type="id" />
+    <item name="voice_enabled" type="id" />
+    <item name="sound_enabled" type="id" />
+    <item name="settings_scroll" type="id" />
+    <item name="plans_setting" type="id" />
+    <item name="demo_start_trial" type="id" />
+    <item name="demo_expire" type="id" />
+    <item name="demo_status" type="id" />
 </resources>

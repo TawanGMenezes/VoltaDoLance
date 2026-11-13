@@ -62,7 +62,7 @@ public class ContinuousVoiceTest {
     @Test public void enabledActivityVoiceActuallyReceivesTheRecordersMicrophone() throws Exception {
         Context target=InstrumentationRegistry.getInstrumentation().getTargetContext();
         target.getSharedPreferences("local_settings",0).edit().clear().putBoolean("voice",true)
-                .putInt("past",15).putString("video_mode","1280x720@30").commit();
+                .putInt("past",15).putString("video_mode","1280x720@30").putInt("notice_accepted_version",AlphaNotice.VERSION).commit();
         scenario=ActivityScenario.launch(MainActivity.class);
         try {
             await("Production shared microphone did not reach activity-owned voice",()->ui(a->
@@ -86,7 +86,7 @@ public class ContinuousVoiceTest {
         Context target=InstrumentationRegistry.getInstrumentation().getTargetContext();
         target.getSharedPreferences("local_settings",0).edit().clear().putBoolean("voice",false)
                 .putInt("past",15).putString("video_mode","1280x720@30")
-                .putString("start_phrase","peixe na linha").putString("stop_phrase","pode salvar").commit();
+                .putString("start_phrase","peixe na linha").putString("stop_phrase","pode salvar").putInt("notice_accepted_version",AlphaNotice.VERSION).commit();
         Uri before=newest(target);
         scenario=ActivityScenario.launch(MainActivity.class);
         OnDeviceVoice decoder=null;

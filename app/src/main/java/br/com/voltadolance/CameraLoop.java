@@ -230,6 +230,7 @@ public final class CameraLoop {
         if(state.isSaving()) return;
         stopBuffer(); state.stopped();
     }
-    public void resumeActivity() { activityActive=true; safetyPaused=false; }
+    public boolean isManuallyPaused() { return manualPaused; }
+    public void resumeActivity() { activityActive=true; }
     public void release() { disposed=true; io.shutdown(); }
 }
