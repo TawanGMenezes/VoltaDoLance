@@ -48,8 +48,8 @@ Botões propostos: **Ler termos e privacidade**, **Entendi e continuar**, **Sair
 
 | Item | Proposta para decisão |
 | --- | --- |
-| Mensal | R$ 7,99 cobrados por mês |
-| Anual | R$ 59,90 cobrados de uma vez por ano; equivalente aproximado de R$ 4,99/mês, sem parcelamento implícito |
+| Mensal | R$ 9,99 cobrados por mês — proposta escolhida pelo usuário |
+| Anual | R$ 94,99 cobrados de uma vez por ano; equivalente aproximado de R$ 7,92/mês, sem parcelamento implícito — proposta escolhida pelo usuário |
 | Teste | 30 dias para conta elegível, começando apenas após confirmação de assinatura pelo Google Play |
 | Renovação | Automática, somente após adesão explícita no Google Play; mostrar valor, período e data da primeira cobrança antes da confirmação |
 | Após expirar | Proposta: impedir apenas o início de novas capturas; permitir acesso, exportação e exclusão dos vídeos já salvos |

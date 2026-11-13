@@ -1,6 +1,6 @@
 # LanceVivo — direção de marca e próximas telas
 
-12/11/2026. Nome e direção 02 escolhidos pelo usuário. Registro de marca ainda não validado. Proposta de telas para revisão; não descreve uma versão já instalada.
+12/11/2026. Nome e direção 02 escolhidos pelo usuário, layout aprovado. Registro de marca ainda não validado. Implementação e validação em andamento; o conceito não é uma captura de uma versão já instalada.
 
 ## Objetivo
 
@@ -28,6 +28,8 @@ Ao abrir configurações, câmera e voz pausam e o histórico não marcado é de
 Tela Android dedicada oferece espaço e navegação previsível; é a recomendação. Um diálogo em tela cheia mantém uma segunda lógica de pausa e aumenta os riscos de comandos dispararem ao editar. Manter os diálogos atuais não resolve a organização solicitada. A escolha de identidade 02 foi feita pelo usuário; a tela dedicada é uma decisão técnica proposta pelo implementador.
 
 ## Limites desta etapa
+
+Adendos autorizados: aparência Claro / Escuro / Seguir o celular, persistida localmente; aceite dos termos da alfa antes das permissões; demonstração de planos somente no APK, sem Google Play. Proposta: R$ 9,99/mês, R$ 94,99/ano e 30 dias grátis. Estados simulados são isolados da captura e podem ser reiniciados. A conta do proprietário deverá ter isenção validada no servidor na versão comercial, sem funções administrativas; não há login nesta alfa e não será criado desbloqueio por aparelho ou senha embutida.
 
 Galeria entra apenas com adaptação da identidade e estado vazio; manter as miniaturas existentes, sem novo editor ou compartilhamento. Sons terá interruptor ligado por padrão, afetando somente os bipes, nunca áudio do vídeo ou reconhecimento. Controle de volume separado e teste guiado de frases por microfone ficam para etapa posterior; a validação atual de frases continua obrigatória. Não acrescentar estabilização ou novas lentes nesta mudança de layout: exigem detecção e testes próprios.
 

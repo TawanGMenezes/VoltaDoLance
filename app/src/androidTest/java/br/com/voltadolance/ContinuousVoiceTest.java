@@ -118,6 +118,7 @@ public class ContinuousVoiceTest {
             assertTrue("unmarked history grew beyond selected window",retained[1]-retained[0]<17_000_000);
             speech(decoder,"start.pcm");
             await("Spoken custom start did not show REC",()->ui(a->((CameraLoop)field(a,"cameraLoop")).state().isRecording()),15000);
+            SettingsScreensTest.screenshot("camera-rec");
             assertTrue(ui(a->((TextView)a.findViewById(R.id.rec_indicator)).getText().toString().startsWith("REC ")));
             assertFalse(ui(a->((Button)a.findViewById(R.id.mark_moment)).isEnabled()));
             Thread.sleep(10500);

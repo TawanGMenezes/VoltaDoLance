@@ -203,7 +203,8 @@ public final class MainActivity extends ThemedActivity {
         shade.setVisibility(dimmed ? View.VISIBLE : View.GONE);
         getWindow().getDecorView().setSystemUiVisibility(dimmed ?
                 View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : 0);
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : palette.dark ? 0 :
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     }
     private void refreshButtons() {
         if (cameraLoop == null || recordButton == null) return;
@@ -321,6 +322,7 @@ public final class MainActivity extends ThemedActivity {
     }
     @Override protected void onDestroy() {
         uiHandler.removeCallbacksAndMessages(null);
+        if (noticeDialog != null && noticeDialog.isShowing()) noticeDialog.dismiss();
         if (voice != null) voice.close();
         if (tones != null) { tones.release(); tones = null; }
         if (cameraLoop != null) cameraLoop.release();

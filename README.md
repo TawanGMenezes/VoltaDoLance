@@ -1,8 +1,16 @@
-# Volta do Lance — alpha 0.3.0
+# LanceVivo — alpha 0.4.0 (projeto VoltaDoLance)
+
+Configurações nativas por assunto e aparência **Claro / Escuro / Seguir o celular** (padrão), persistida no aparelho. Mudanças do tema do sistema durante um lance são aplicadas depois do salvamento para não interromper a captura.
+
+A primeira abertura inclui termos e privacidade do teste antes das permissões. Configurações pausam câmera/voz e descartam histórico não marcado. Ao voltar, preferências são recarregadas e a pausa manual é respeitada. Vídeos existentes e pacote Android permanecem compatíveis.
+
+**Planos são demonstração local, sem compra, cartão, login ou cobrança.** Proposta: 30 dias grátis, R$ 9,99/mês ou R$ 94,99/ano. Pode simular teste, assinatura e expiração e reiniciar a demonstração; esses estados nunca bloqueiam captura. Isenção da conta do proprietário, proteção contra reinstalação e compras reais dependem de autenticação/servidor/loja na etapa comercial. Indicações ainda são proposta, sem código ou recompensa real.
+
+Não há publicação na Google Play. O APK de teste é distribuído pelo GitHub. Economia automática e gravação com tela bloqueada não fazem parte desta versão.
 
 Aplicativo Android com identidade e textos próprios. Sem assinatura, cobrança, contas, anúncios ou upload. Somente CAMERA e RECORD_AUDIO; sem permissão INTERNET.
 
-## Correções desta versão
+## Base de captura preservada da alpha 0.3.0
 
 - Uma única sessão Camera2 e codificadores AVC/AAC contínuos. A câmera não para/reinicia a cada quatro segundos nem ao marcar o lance. O MP4 usa uma linha do tempo comum, preservando os tempos entre áudio e vídeo.
 - Um único AudioRecord alimenta o vídeo e o reconhecedor offline de português (Vosk/modelo incluído no APK). A voz não disputa o microfone com outro serviço. A tela distingue carregando, aguardando áudio, ouvindo, frase ouvida e erro/repetição da tentativa.

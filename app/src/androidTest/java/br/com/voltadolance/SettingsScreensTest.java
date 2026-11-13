@@ -17,11 +17,11 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class SettingsScreensTest {
-    private void shell(String command)throws Exception{
+    private static void shell(String command)throws Exception{
         try(ParcelFileDescriptor fd=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
             FileInputStream input=new FileInputStream(fd.getFileDescriptor())){byte[] bytes=new byte[4096];while(input.read(bytes)!=-1){} }
     }
-    private void screenshot(String name)throws Exception{
+    static void screenshot(String name)throws Exception{
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();SystemClock.sleep(500);
         shell("mkdir -p /sdcard/Download/lancevivo-qa");shell("screencap -p /sdcard/Download/lancevivo-qa/"+name+".png");
     }
