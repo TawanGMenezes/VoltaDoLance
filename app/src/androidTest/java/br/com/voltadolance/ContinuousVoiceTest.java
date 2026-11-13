@@ -118,7 +118,6 @@ public class ContinuousVoiceTest {
             assertTrue("unmarked history grew beyond selected window",retained[1]-retained[0]<17_000_000);
             speech(decoder,"start.pcm");
             await("Spoken custom start did not show REC",()->ui(a->((CameraLoop)field(a,"cameraLoop")).state().isRecording()),15000);
-            SettingsScreensTest.screenshot("camera-rec");
             assertTrue(ui(a->((TextView)a.findViewById(R.id.rec_indicator)).getText().toString().startsWith("REC ")));
             assertFalse(ui(a->((Button)a.findViewById(R.id.mark_moment)).isEnabled()));
             // A real microphone keeps supplying ambient PCM between commands. Do not
@@ -134,6 +133,9 @@ public class ContinuousVoiceTest {
                 byte[] bytes=new byte[65536];int count;while((count=input.read(bytes))!=-1)output.write(bytes,0,count);
             }
             verifyTimeline(sample,target);
+            // Screen capture/launcher cleanup is visual QA, not part of the camera
+            // continuity workload. Collect it only after the saved MP4 was verified.
+            SettingsScreensTest.screenshot("camera-saved");
         } finally {
             if(decoder!=null)decoder.close();
             if(scenario!=null)scenario.close();
