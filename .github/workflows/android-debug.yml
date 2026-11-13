@@ -98,4 +98,4 @@ jobs:
           BUILD_SHA: ${{ github.sha }}
         run: |
           mv apk/app-debug.apk apk/LanceVivo-0.4.1-alpha.apk
-          gh release create "$BUILD_TAG" apk/LanceVivo-0.4.1-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.4.1 alpha" --notes "Identidade LanceVivo, configuracoes organizadas, temas claro/escuro/sistema, aceite dos termos do teste e demonstracao de planos sem cobranca. Captura continua e voz offline preservadas. Validacao fisica no OPPO ainda necessaria."
+          gh release create "$BUILD_TAG" apk/LanceVivo-0.4.1-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.4.1 alpha" --notes "Seletores padronizados nos temas claro/escuro, icone de galeria reconhecivel e troca traseira/frontal com qualidade compativel e recuperacao de falha. Captura continua e frases exatas preservadas. Planos apenas demonstrativos, sem cobranca. Validacao fisica no OPPO ainda necessaria."

@@ -1,4 +1,8 @@
-# LanceVivo — alpha 0.4.0 (projeto VoltaDoLance)
+# LanceVivo — alpha 0.4.1 (projeto VoltaDoLance)
+
+Troca entre câmeras traseira e frontal fora da gravação/salvamento. Mantém resolução e FPS se suportados, prioriza a mesma resolução quando só a taxa precisa mudar, e usa o melhor modo informado pela câmera destino quando necessário. Se a abertura da nova câmera falhar, tenta retornar à anterior. A troca descarta somente o histórico não marcado, preserva a pausa manual e mostra a câmera/qualidade aplicadas. Prévia frontal espelhada; vídeo salvo sem espelhamento adicional e com orientação do sensor.
+
+Seletores padronizados em cartões arredondados, com destaque da opção escolhida e suporte aos temas claro/escuro. Ícone vetorial maior e reconhecível para a galeria.
 
 Configurações nativas por assunto e aparência **Claro / Escuro / Seguir o celular** (padrão), persistida no aparelho. Mudanças do tema do sistema durante um lance são aplicadas depois do salvamento para não interromper a captura.
 
@@ -38,6 +42,6 @@ O reconhecedor é local e o modelo português tem tamanho fixo no APK/armazename
 
 Use [Releases](https://github.com/TawanGMenezes/VoltaDoLance/releases) para baixar o `.apk` diretamente. O Actions da main publica uma pré-versão somente após testes JVM/UI, assinatura/alinhamento, instalação/reinstalação e teste Android com Camera2/AVC/AAC e fala sintética em português.
 
-Versão `0.4.0-alpha`, código `5`, pacote `br.com.voltadolance.dev`. Java 17, Gradle 8.13, SDK36, AGP8.12.2. Assinatura debug preservada no cache enquanto disponível; não é distribuição comercial. Modelo português Vosk small pt0.3 e Vosk API: Apache2; JNA distribuído sob Apache2. Atribuições/licenças incluídas no APK.
+Versão `0.4.1-alpha`, código `6`, pacote `br.com.voltadolance.dev`. Java 17, Gradle 8.13, SDK36, AGP8.12.2. Assinatura debug preservada no cache enquanto disponível; não é distribuição comercial. Modelo português Vosk small pt0.3 e Vosk API: Apache2; JNA distribuído sob Apache2. Atribuições/licenças incluídas no APK.
 
 Ainda é necessário testar no OPPO real: comandos com a própria voz e frases escolhidas; vento/ruído; bips e volume; orientação e áudio; fluidez nos modos oferecidos; eventos longos, pausas/retomadas e espaço disponível. Testes de emulador não garantem funcionamento em todos os aparelhos.
