@@ -14,6 +14,7 @@ import static org.junit.Assert.*;
 public class SettingsNavigationTest {
     @Test public void settingsOpensDedicatedScreenWithoutRequiringPermissions() throws Exception {
         MainActivity activity=Robolectric.buildActivity(MainActivity.class).create().get();
+        while(shadowOf(activity).getNextStartedActivity()!=null) { /* Ignore initial Android permission request. */ }
         java.lang.reflect.Method open=MainActivity.class.getDeclaredMethod("openSettings");
         open.setAccessible(true); open.invoke(activity);
         Intent next=shadowOf(activity).getNextStartedActivity();
