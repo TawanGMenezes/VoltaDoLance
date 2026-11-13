@@ -17,7 +17,7 @@ Referências do Fisgou enviadas pelo usuário servem para entender funções. N�
 - Câmera: prioridade à imagem, estado do histórico e da voz explícitos, ação Marcar lance, Encerrar e salvar durante gravação, miniatura da galeria e acesso às configurações.
 - Configurações: tela dedicada com Captura, Comandos de voz, Sons e avisos, Energia e espaço, Planos e benefícios, Privacidade e ajuda.
 - Captura: separar Antes de marcar (15/30/60 segundos) de Após marcar (3/10/20/30/60 minutos ou sem limite fixo). Qualidade vem das capacidades reais do aparelho.
-- Voz: editar e salvar as duas frases em conjunto, mostrar erros sem perder o texto digitado; informar comando reservado encerrar. Reconhecimento continua local e com um único microfone.
+- Voz: editar e salvar as duas frases em conjunto, mostrar erros sem perder o texto digitado; exigir a frase inteira configurada, sem palavras extras ou comandos alternativos. “Encerrar” só funciona se configurado. Tolerar apenas caixa, acentos e pontuação. Reconhecimento continua local e com um único microfone.
 - Galeria: miniaturas, duração quando disponível e estado vazio com retorno à câmera.
 - Plano: somente apresentação de proposta, compras desativadas. Sem relógio de teste gratuito, cobrança, cadastro ou código de indicação funcional nesta etapa.
 

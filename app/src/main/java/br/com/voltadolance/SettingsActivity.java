@@ -110,7 +110,7 @@ public final class SettingsActivity extends ThemedActivity {
         CaptureSettings s=new CaptureSettings(prefs);toggle("Comandos de voz ativados","Reconhecimento no aparelho. Nenhum microfone fica ouvindo enquanto você ajusta esta tela.","voice",s.voice,R.id.voice_enabled);
         TextView a=text("Para começar",17,true);content.addView(a);startInput=new EditText(this);startInput.setId(R.id.start_phrase);startInput.setSingleLine();startInput.setText(draftStart==null?s.start:draftStart);startInput.setTextColor(palette.text);startInput.setContentDescription("Frase para começar");content.addView(startInput,new LinearLayout.LayoutParams(-1,dp(64)));
         TextView b=text("Para encerrar e salvar",17,true);b.setPadding(0,dp(20),0,0);content.addView(b);stopInput=new EditText(this);stopInput.setId(R.id.stop_phrase);stopInput.setSingleLine();stopInput.setText(draftStop==null?s.stop:draftStop);stopInput.setTextColor(palette.text);stopInput.setContentDescription("Frase para encerrar e salvar");content.addView(stopInput,new LinearLayout.LayoutParams(-1,dp(64)));
-        note("Você também pode dizer encerrar. Use frases distintas e curtas; diga a frase inteira. Acentos e pontuação são ignorados.");
+        note("Diga exatamente a frase configurada, sem palavras extras. Para usar encerrar, escreva encerrar no campo de finalização. Maiúsculas, acentos e pontuação são ignorados.");
         TextView error=text("",14,false);error.setTextColor(palette.dark?0xFFFFB4A5:0xFF9F281D);error.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(error);
         action("Salvar frases",R.id.save_phrases,()->{try{CaptureSettings.savePhrases(prefs,startInput.getText().toString(),stopInput.getText().toString());rememberDraft();error.setText("");Toast.makeText(this,"Frases salvas neste aparelho",Toast.LENGTH_SHORT).show();}catch(IllegalArgumentException e){error.setText(e.getMessage());}});
         paragraph("Teste suas frases na câmera antes de confiar no comando durante um lance. Ruído, vento e distância podem dificultar o reconhecimento. Voltar sem salvar descarta somente as alterações das frases.");
@@ -145,7 +145,7 @@ public final class SettingsActivity extends ThemedActivity {
     private void help(){
         paragraph("LanceVivo • versão 0.4.0 alfa\nViva a ação. Guarde o momento.");
         row("Termos e privacidade do teste","Leia o aviso aceito na primeira abertura",0,()->new AlertDialog.Builder(this).setTitle("Termos e privacidade").setMessage(AlphaNotice.TEXT).setPositiveButton("Fechar",null).show());
-        paragraph("Para guardar um lance\n1. Espere HISTÓRICO ATIVO e confira a escuta.\n2. Diga sua frase ou toque em Marcar lance. Confira REC e o bip.\n3. Diga encerrar ou a frase configurada, ou toque em Encerrar e salvar. Espere a confirmação de vídeo salvo.");
+        paragraph("Para guardar um lance\n1. Espere HISTÓRICO ATIVO e confira a escuta.\n2. Diga exatamente a frase de início ou toque em Marcar lance. Confira REC e o bip.\n3. Diga exatamente a frase de finalização ou toque em Encerrar e salvar. Espere a confirmação de vídeo salvo.");
         note("Nome e identidade escolhidos para teste; registro de marca e dados do responsável comercial ainda precisam ser concluídos antes do lançamento pago.");
     }
     private void goBack(){if(page.equals("home"))finish();else{draftStart=null;draftStop=null;startInput=null;stopInput=null;show("home");}}

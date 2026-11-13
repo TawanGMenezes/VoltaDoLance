@@ -121,7 +121,9 @@ public class ContinuousVoiceTest {
             SettingsScreensTest.screenshot("camera-rec");
             assertTrue(ui(a->((TextView)a.findViewById(R.id.rec_indicator)).getText().toString().startsWith("REC ")));
             assertFalse(ui(a->((Button)a.findViewById(R.id.mark_moment)).isEnabled()));
-            Thread.sleep(10500);
+            // A real microphone keeps supplying ambient PCM between commands. Do not
+            // represent ten seconds of silence by removing ten seconds of decoder input.
+            ambientSilence(decoder,10500);
             assertSame(engine,ui(a->field(field(a,"cameraLoop"),"recorder")));
             assertSame(session,ui(a->field(field(a,"cameraLoop"),"session")));
             speech(decoder,"stop.pcm");

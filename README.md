@@ -14,7 +14,7 @@ Aplicativo Android com identidade e textos próprios. Sem assinatura, cobrança,
 
 - Uma única sessão Camera2 e codificadores AVC/AAC contínuos. A câmera não para/reinicia a cada quatro segundos nem ao marcar o lance. O MP4 usa uma linha do tempo comum, preservando os tempos entre áudio e vídeo.
 - Um único AudioRecord alimenta o vídeo e o reconhecedor offline de português (Vosk/modelo incluído no APK). A voz não disputa o microfone com outro serviço. A tela distingue carregando, aguardando áudio, ouvindo, frase ouvida e erro/repetição da tentativa.
-- Frases de marcar e encerrar personalizáveis e locais; acentos e caixa são ignorados, palavras completas são reconhecidas mesmo dentro de uma frase. “Encerrar” também funciona como comando de parada. Apenas hipóteses concluídas acionam comandos, evitando resultados parciais que mudam de interpretação.
+- Frases de marcar e encerrar personalizáveis e locais; exige a frase inteira configurada, sem palavras extras. Acentos, caixa e pontuação são ignorados. Não existem comandos alternativos implícitos: para encerrar dizendo “encerrar”, configure essa frase. Apenas hipóteses concluídas acionam comandos, evitando resultados parciais que mudam de interpretação. Reconhecimento acústico ainda pode errar; confira os estados e teste antes de usar.
 - Ao aceitar o início: REC vermelho piscando, cronômetro e um bip curto. Ao aceitar o fim: REC encerra, dois bips e estado de salvamento. Os sons usam o volume de mídia do aparelho e valem para voz e botões.
 - Botão para pausar o histórico e desligar câmera/microfone nos intervalos. Retomar câmera volta a preparar o histórico.
 

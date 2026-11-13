@@ -24,14 +24,14 @@ public class VoiceCommandsTest {
   for(String[] p:new String[][]{{"!!!","fim"},{"vídeo","VIDEO"},{"a".repeat(81),"fim"},{null,"fim"}})
    assertThrows(IllegalArgumentException.class,()->new VoiceCommands(p[0],p[1]));
  }
- @Test public void encerrarAlwaysFinishesAndCannotBeStartPhrase() {
+ @Test public void encerrarOnlyFinishesWhenItIsTheConfiguredStopPhrase() {
   VoiceCommands c=new VoiceCommands("gravar","pode salvar");
-  assertEquals(VoiceCommands.Command.FINISH,c.match("encerrar"));
+  assertEquals(VoiceCommands.Command.NONE,c.match("encerrar"));
   assertEquals(VoiceCommands.Command.NONE,c.match("agora encerrar e salvar"));
   assertEquals(VoiceCommands.Command.NONE,c.match("encerraram"));
-  assertThrows(IllegalArgumentException.class,()->new VoiceCommands("agora encerrar","fim"));
+  assertEquals(VoiceCommands.Command.FINISH,new VoiceCommands("gravar","encerrar").match("encerrar"));
  }
- @Test public void grammarPreservesAccentsAndIncludesStopAliasAndUnknown() {
+ @Test public void grammarPreservesAccentsAndOnlyIncludesConfiguredPhrasesAndUnknown() {
   VoiceCommands c=new VoiceCommands("AÇÃO já!","Encerrar vídeo");
-  assertArrayEquals(new String[]{"ação já","encerrar vídeo","encerrar","[unk]"},c.grammarPhrases());
+  assertArrayEquals(new String[]{"ação já","encerrar vídeo","[unk]"},c.grammarPhrases());
  }}

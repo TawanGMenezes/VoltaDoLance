@@ -3,7 +3,7 @@ package br.com.voltadolance;
 import java.text.Normalizer;
 import java.util.Locale;
 
-/** Accent-insensitive, whole-token phrases; the finish command has priority. */
+/** Accent-insensitive equality of complete, finalized configured phrases. */
 public final class VoiceCommands {
     public enum Command { NONE, MARK, FINISH }
     private final String start;
@@ -11,11 +11,10 @@ public final class VoiceCommands {
     private final String[] grammar;
     public VoiceCommands(String start, String stop) {
         this.start = normalize(start); this.stop = normalize(stop);
-        grammar = new String[]{grammarPhrase(start), grammarPhrase(stop), "encerrar", "[unk]"};
+        grammar = new String[]{grammarPhrase(start), grammarPhrase(stop), "[unk]"};
         if (this.start.isEmpty() || this.stop.isEmpty() || this.start.equals(this.stop)
-                || start.length() > 80 || stop.length() > 80
-                || (" " + this.start + " ").contains(" encerrar "))
-            throw new IllegalArgumentException("Use duas frases diferentes, até 80 caracteres. Reserve “encerrar” para finalizar.");
+                || start.length() > 80 || stop.length() > 80)
+            throw new IllegalArgumentException("Use duas frases diferentes e completas, com até 80 caracteres.");
     }
     static String normalize(String value) {
         if (value == null) return "";
@@ -29,8 +28,6 @@ public final class VoiceCommands {
     String[] grammarPhrases() { return grammar.clone(); }
     public Command match(String utterance) {
         String value = normalize(utterance);
-        String padded = " " + value + " ";
-        return (padded.contains(" " + stop + " ") || padded.contains(" encerrar ")) ? Command.FINISH
-                : padded.contains(" " + start + " ") ? Command.MARK : Command.NONE;
+        return value.equals(stop) ? Command.FINISH : value.equals(start) ? Command.MARK : Command.NONE;
     }
 }
