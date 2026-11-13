@@ -40,6 +40,19 @@ public class SettingsLifecycleTest {
         CameraLoop loop=(CameraLoop)field(a,"cameraLoop");loop.state().ready();open(a);
         OnDeviceVoice.Callback callback=(OnDeviceVoice.Callback)field(field(a,"voice"),"callback");callback.onMark();assertFalse(loop.state().isRecording());ctl.pause().stop().destroy();
     }
+    @Test public void themeChangeWaitsUntilRecordingAndExportFinish()throws Exception{
+        p.edit().putString("appearance","light").commit();AlphaNotice.accept(RuntimeEnvironment.getApplication());
+        ActivityController<MainActivity> ctl=Robolectric.buildActivity(MainActivity.class).setup();MainActivity a=ctl.get();
+        CameraLoop loop=(CameraLoop)field(a,"cameraLoop");loop.state().ready();loop.state().mark(1);
+        p.edit().putString("appearance","dark").commit();a.refreshAppearanceIfNeeded();assertFalse(a.appearanceRecreation);
+        loop.state().beginSaving();a.refreshAppearanceIfNeeded();assertFalse(a.appearanceRecreation);
+        loop.state().saved();a.refreshAppearanceIfNeeded();assertTrue(a.appearanceRecreation);
+    }
+    @Test public void legacyQualityAndSafeDefaultsDoNotRewriteOtherPreferences(){
+        p.edit().putInt("video_height",1080).putInt("past",1000).putInt("post_minutes",1000).putString("unrelated","keep").commit();
+        CaptureSettings s=new CaptureSettings(p);assertEquals("1920x1080@30",s.mode);assertEquals(15,s.past);assertEquals(10,s.postMinutes);assertTrue(s.sounds);
+        assertEquals("keep",p.getString("unrelated",null));assertEquals(1000,p.getInt("past",0));
+    }
     private static CheckBox checkbox(View v){if(v instanceof CheckBox)return(CheckBox)v;if(v instanceof ViewGroup){for(int i=0;i<((ViewGroup)v).getChildCount();i++){CheckBox c=checkbox(((ViewGroup)v).getChildAt(i));if(c!=null)return c;}}return null;}
     @Test public void firstLaunchRequiresExplicitTestTermsAcceptanceBeforeCapture()throws Exception{
         MainActivity a=Robolectric.buildActivity(MainActivity.class).create().get();shadowOf(Looper.getMainLooper()).idle();
