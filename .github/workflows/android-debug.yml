@@ -61,18 +61,13 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
           script: |
-            bash scripts/check-install.sh
-            gradle --no-daemon :app:connectedDebugAndroidTest
-            find app/build/outputs/androidTest-results -name 'logcat*.txt' -print0 | xargs -0 grep 'ContinuityTimeline' > install-results/continuity-report.txt
+            bash scripts/check-android.sh
       - name: Publicar APK na aba Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VoltaDoLance-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Recolher imagens reais das telas de teste
-        if: always()
-        run: adb pull /sdcard/Download/lancevivo-qa install-results/ || true
       - name: Publicar relatórios de teste
         if: always()
         uses: actions/upload-artifact@v4
