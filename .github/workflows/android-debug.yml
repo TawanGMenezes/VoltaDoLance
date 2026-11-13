@@ -70,6 +70,9 @@ jobs:
           name: VoltaDoLance-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Recolher imagens reais das telas de teste
+        if: always()
+        run: adb pull /sdcard/Download/lancevivo-qa install-results/ || true
       - name: Publicar relatórios de teste
         if: always()
         uses: actions/upload-artifact@v4
