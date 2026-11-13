@@ -33,7 +33,7 @@ public final class CameraLoop {
     private CameraCaptureSession session;
     private Surface previewSurface;
     private ContinuousRecorder recorder;
-    private int pastSeconds=15,orientation=90,generation,modeIndex;
+    private int pastSeconds=15,orientation=90,generation,modeIndex,facing=CameraCharacteristics.LENS_FACING_BACK;
     private long maxEventMs=600000;
     private boolean running,closing,activityActive=true,safetyPaused,manualPaused,disposed;
     private String requestedMode="1280x720@30",cameraId,safetyNotice="";
@@ -45,6 +45,26 @@ public final class CameraLoop {
     public CaptureState state() { return state; }
     public void setPastSeconds(int seconds) { pastSeconds=seconds; if(recorder!=null) recorder.setPastSeconds(seconds); }
     public void setMode(String key) { requestedMode=key; }
+    public void setFacing(int value) {if(!running&&!isCapturing())facing=value==CameraCharacteristics.LENS_FACING_FRONT?value:CameraCharacteristics.LENS_FACING_BACK;}
+    public int facing() {return facing;}
+    public String lensLabel(){return facing==CameraCharacteristics.LENS_FACING_FRONT?"Frontal":"Traseira";}
+    public String selectedMode(){return modes.isEmpty()?requestedMode:modes.get(modeIndex).key();}
+    public boolean switchCamera() {
+        if(isCapturing()||closing||disposed)return false;
+        try{
+            int destination=facing==CameraCharacteristics.LENS_FACING_BACK?CameraCharacteristics.LENS_FACING_FRONT:CameraCharacteristics.LENS_FACING_BACK;
+            CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
+            String target=CameraModes.cameraForFacing(manager,destination);
+            List<CameraModes.Mode> supported=CameraModes.detect(manager.getCameraCharacteristics(target));
+            int selected=CameraModes.chooseModeIndex(supported,selectedMode());
+            if(selected<0)throw new IllegalStateException("Nenhum modo de vídeo compatível nesta câmera");
+            stopBuffer();facing=destination;requestedMode=supported.get(selected).key();modes=supported;modeIndex=selected;
+            activity.getSharedPreferences("local_settings",0).edit().putInt("camera_facing",facing).putString("video_mode",requestedMode).apply();
+            preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);
+            if(manualPaused){state.stopped();status(lensLabel()+" selecionada • "+modeLabel()+" • histórico pausado");}else start();
+            return true;
+        }catch(Exception e){listener.onError("Não foi possível trocar: "+e.getMessage());return false;}
+    }
     public void setPostMinutes(int minutes) {
         if(!Arrays.asList(0,3,10,20,30,60).contains(minutes)) throw new IllegalArgumentException("Duração inválida");
         maxEventMs=minutes*60000L;
@@ -74,13 +94,13 @@ public final class CameraLoop {
             String unsafe=unsafeReason();
             if(unsafe!=null) { safetyPaused=true; error(unsafe+" • histórico pausado"); return; }
             CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
-            cameraId=CameraModes.backCamera(manager);
+            cameraId=CameraModes.cameraForFacing(manager,facing);
             CameraCharacteristics cc=manager.getCameraCharacteristics(cameraId);
             Integer angle=cc.get(CameraCharacteristics.SENSOR_ORIENTATION); if(angle!=null) orientation=angle;
             modes=CameraModes.detect(cc);
             if(modes.isEmpty()) throw new IllegalStateException("Nenhum modo compatível informado");
-            modeIndex=modes.size()-1;
-            for(int i=0;i<modes.size();i++) if(modes.get(i).key().equals(requestedMode)) modeIndex=i;
+            modeIndex=CameraModes.chooseModeIndex(modes,requestedMode);
+            preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);
             running=true; state.preparing(); status("Preparando histórico contínuo…");
             prepareMode(++generation);
         } catch(Exception e) { fail("Não foi possível abrir a câmera: "+e.getMessage()); }
@@ -93,7 +113,7 @@ public final class CameraLoop {
                 ContinuousRecorder prepared=new ContinuousRecorder(activity,mode,orientation,pastSeconds,new ContinuousRecorder.Listener() {
                     public void onPcm(byte[] pcm,int length) { listener.onPcm(pcm,length); }
                     public void onReady() {
-                        main.post(()->{ if(current(token)) { state.ready(); status("Histórico ativo • "+mode.label()+" • até "+pastSeconds+" s"); } });
+                        main.post(()->{ if(current(token)) { state.ready(); status(lensLabel()+" • "+mode.label()+" • histórico de até "+pastSeconds+" s"); } });
                     }
                     public void onError(String message) { main.post(()->{ if(current(token)) fail(message); }); }
                 });

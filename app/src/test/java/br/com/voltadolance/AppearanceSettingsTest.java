@@ -36,8 +36,8 @@ public class AppearanceSettingsTest {
         p.edit().putInt("past",60).putString("start_phrase","peixe na linha").commit();
         SettingsActivity a=Robolectric.buildActivity(SettingsActivity.class).setup().get();
         a.findViewById(R.id.appearance_setting).performClick();
-        AlertDialog d=org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
-        d.getListView().performItemClick(d.getListView().getChildAt(2),2,2);
+        android.app.Dialog d=org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        d.getWindow().getDecorView().findViewWithTag("choice_2").performClick();
         assertEquals("dark",p.getString("appearance",null));
         assertEquals(60,p.getInt("past",0));
         assertEquals("peixe na linha",p.getString("start_phrase",null));

@@ -40,6 +40,9 @@ public class SettingsScreensTest {
             try(ActivityScenario<SettingsActivity> scenario=ActivityScenario.launch(SettingsActivity.class)){
                 scenario.onActivity(a->{assertEquals(mode.equals("dark"),a.palette.dark);assertNotNull(a.findViewById(R.id.appearance_setting));});
                 screenshot(mode+"-settings");
+                scenario.onActivity(a->a.findViewById(R.id.appearance_setting).performClick());screenshot(mode+"-appearance-choice");
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().performGlobalAction(1);
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync();
                 scenario.onActivity(a->a.findViewById(R.id.voice_setting).performClick());screenshot(mode+"-voice");
                 scenario.onActivity(a->{((EditText)a.findViewById(R.id.start_phrase)).setText("Peixe na linha");((EditText)a.findViewById(R.id.stop_phrase)).setText("Pode salvar");a.findViewById(R.id.save_phrases).performClick();a.onBackPressed();});
                 scenario.onActivity(a->a.findViewById(R.id.plans_setting).performClick());screenshot(mode+"-plans");

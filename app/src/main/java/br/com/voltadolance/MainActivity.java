@@ -45,7 +45,7 @@ public final class MainActivity extends ThemedActivity {
     private Button recordButton;
     private Button stopButton;
     private Button settingsButton;
-    private Button galleryButton;
+    private android.widget.ImageButton galleryButton,cameraSwitchButton;
     private TextView recLabel;
     private TextView recDot;
     private TextView historyHint;
@@ -70,6 +70,8 @@ public final class MainActivity extends ThemedActivity {
     private String stopPhrase;
     private boolean useVoice;
     private boolean sounds = true, foreground, navigating;
+    private boolean pendingVoiceRestart;
+    private int facing;
     private AlertDialog noticeDialog;
 
     private int dp(int n) { return Math.round(getResources().getDisplayMetrics().density * n); }
@@ -97,6 +99,10 @@ public final class MainActivity extends ThemedActivity {
         cameraLoop = new CameraLoop(this, preview, new CameraLoop.Listener() {
             @Override public void onStatus(String message) {
                 stateLabel.setText(message);
+                if(pendingVoiceRestart&&cameraLoop.state().canMark()){
+                    pendingVoiceRestart=false;
+                    if(foreground&&!navigating&&useVoice)voice.enable();
+                }
                 refreshButtons();
             }
             @Override public void onSaved(Uri uri) {
@@ -109,6 +115,7 @@ public final class MainActivity extends ThemedActivity {
                 refreshButtons();
             }
             @Override public void onError(String error) {
+                pendingVoiceRestart=false;
                 stateLabel.setText(error);
                 Toast.makeText(MainActivity.this, error, Toast.LENGTH_LONG).show();
                 refreshButtons();
@@ -120,10 +127,11 @@ public final class MainActivity extends ThemedActivity {
         });
         cameraLoop.setPastSeconds(past);
         cameraLoop.setMode(modeKey);
+        cameraLoop.setFacing(facing);
         cameraLoop.setPostMinutes(postMinutes);
         voice = new OnDeviceVoice(this, new OnDeviceVoice.Callback() {
-            @Override public void onMark() { if (foreground && !navigating) { cameraLoop.markMoment(); refreshButtons(); } }
-            @Override public void onFinish() { if (foreground && !navigating) { cameraLoop.finishAndSave(); refreshButtons(); } }
+            @Override public void onMark() { if (foreground && !navigating && !pendingVoiceRestart) { cameraLoop.markMoment(); refreshButtons(); } }
+            @Override public void onFinish() { if (foreground && !navigating && !pendingVoiceRestart) { cameraLoop.finishAndSave(); refreshButtons(); } }
             @Override public void onUnavailable() {
                 Toast.makeText(MainActivity.this, "A voz está tentando se recuperar. Confira o estado da escuta na tela; os botões continuam disponíveis.", Toast.LENGTH_LONG).show();
             }
@@ -139,9 +147,9 @@ public final class MainActivity extends ThemedActivity {
     private void loadPreferences() {
         CaptureSettings settings=new CaptureSettings(preferences);
         boolean phrasesChanged=!settings.start.equals(startPhrase)||!settings.stop.equals(stopPhrase);
-        past=settings.past;modeKey=settings.mode;postMinutes=settings.postMinutes;
+        past=settings.past;modeKey=settings.mode;postMinutes=settings.postMinutes;facing=settings.facing;
         startPhrase=settings.start;stopPhrase=settings.stop;useVoice=settings.voice;sounds=settings.sounds;
-        if(cameraLoop!=null){cameraLoop.setPastSeconds(past);cameraLoop.setMode(modeKey);cameraLoop.setPostMinutes(postMinutes);}
+        if(cameraLoop!=null){cameraLoop.setPastSeconds(past);cameraLoop.setMode(modeKey);cameraLoop.setFacing(facing);cameraLoop.setPostMinutes(postMinutes);}
         if(voice!=null && phrasesChanged)voice.setPhrases(startPhrase,stopPhrase);
     }
     private void buildUi() {
@@ -155,7 +163,7 @@ public final class MainActivity extends ThemedActivity {
         LinearLayout title=new LinearLayout(this);title.setOrientation(1);title.setPadding(dp(10),0,dp(4),0);
         title.addView(text("LanceVivo",22,WHITE,true));subtitle=text("Viva a ação.",12,palette.secondary,false);title.addView(subtitle);
         top.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        galleryButton=button("▣",palette.tint,WHITE);galleryButton.setContentDescription("Abrir galeria de vídeos");
+        galleryButton=iconButton(R.drawable.ic_gallery,"Galeria de vídeos");galleryButton.setId(R.id.gallery_button);
         galleryButton.setOnClickListener(v->navigate(GalleryActivity.class));top.addView(galleryButton,new LinearLayout.LayoutParams(dp(48),dp(48)));
         settingsButton=button("⚙",palette.tint,WHITE);settingsButton.setId(R.id.settings_button);settingsButton.setContentDescription("Abrir configurações");
         settingsButton.setOnClickListener(v->openSettings());LinearLayout.LayoutParams gearLp=new LinearLayout.LayoutParams(dp(48),dp(48));gearLp.leftMargin=dp(8);top.addView(settingsButton,gearLp);
@@ -194,9 +202,26 @@ public final class MainActivity extends ThemedActivity {
         TextView black=text("Prévia oculta\n\nCâmera e voz continuam ativas.\nToque para voltar",18,0xFFFFFFFF,true);black.setGravity(Gravity.CENTER);black.setBackgroundColor(Color.BLACK);black.setOnClickListener(v->toggleShade());black.setVisibility(View.GONE);shade=black;root.addView(shade,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout indicator=new LinearLayout(this);indicator.setGravity(Gravity.CENTER);indicator.setPadding(dp(14),dp(8),dp(14),dp(8));indicator.setBackground(bg(0xFF172B4D,14));
         recDot=text("●  ",22,0xFFFF8D7A,true);recLabel=text("PREPARANDO",16,0xFFFFFFFF,true);recLabel.setId(R.id.rec_indicator);recLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);indicator.addView(recDot);indicator.addView(recLabel);
-        FrameLayout.LayoutParams recLp=new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.CENTER_HORIZONTAL);recLp.topMargin=dp(92);root.addView(indicator,recLp);
-        top.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{recLp.topMargin=b-root.getPaddingTop()+dp(10);indicator.setLayoutParams(recLp);});
+        LinearLayout captureTools=new LinearLayout(this);captureTools.setGravity(Gravity.CENTER_VERTICAL);captureTools.setPadding(dp(12),0,dp(12),0);
+        captureTools.addView(indicator,new LinearLayout.LayoutParams(0,-2,1));
+        cameraSwitchButton=iconButton(R.drawable.ic_switch_camera,"Trocar câmera");cameraSwitchButton.setId(R.id.camera_switch);cameraSwitchButton.setOnClickListener(v->switchCamera());
+        LinearLayout.LayoutParams switchLp=new LinearLayout.LayoutParams(dp(52),dp(52));switchLp.leftMargin=dp(10);captureTools.addView(cameraSwitchButton,switchLp);
+        FrameLayout.LayoutParams recLp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);recLp.topMargin=dp(92);root.addView(captureTools,recLp);
+        top.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{recLp.topMargin=b-root.getPaddingTop()+dp(10);captureTools.setLayoutParams(recLp);});
         setContentView(root);refreshButtons();
+    }
+    private android.widget.ImageButton iconButton(int icon,String label){
+        android.widget.ImageButton b=new android.widget.ImageButton(this);b.setImageResource(icon);b.setImageTintList(android.content.res.ColorStateList.valueOf(palette.text));b.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);b.setPadding(dp(10),dp(10),dp(10),dp(10));b.setBackground(bg(palette.tint,14));b.setContentDescription(label);b.setTooltipText(label);return b;
+    }
+    private void switchCamera(){
+        if(!foreground||navigating||pendingVoiceRestart||cameraLoop==null||cameraLoop.isCapturing())return;
+        pendingVoiceRestart=true;voice.disable();voiceStatus="Voz aguardando a troca de câmera";updateVoiceSubtitle();
+        boolean changed=cameraLoop.switchCamera();
+        if(!changed||cameraLoop.isManuallyPaused()){
+            pendingVoiceRestart=false;
+            if(!changed&&useVoice&&cameraLoop.isRunning())voice.enable();
+        }
+        modeKey=preferences.getString("video_mode",modeKey);facing=preferences.getInt("camera_facing",facing);refreshButtons();
     }
     private void toggleShade() {
         dimmed = !dimmed;
@@ -231,6 +256,9 @@ public final class MainActivity extends ThemedActivity {
         stopButton.setVisibility(active || exporting ? View.VISIBLE : View.GONE);
         settingsButton.setEnabled(!active && !exporting);
         galleryButton.setEnabled(!active && !exporting);
+        cameraSwitchButton.setEnabled(!active&&!exporting&&!pendingVoiceRestart&&state.phase()!=CaptureState.Phase.PREPARING);
+        cameraSwitchButton.setAlpha(cameraSwitchButton.isEnabled()?1f:0.45f);
+        cameraSwitchButton.setContentDescription(cameraLoop.facing()==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?"Trocar para câmera traseira":"Trocar para câmera frontal");
         pauseButton.setEnabled(!active && !exporting && cameraLoop.isRunning());
         pauseButton.setAlpha(pauseButton.isEnabled() ? 1f : 0.45f);
         settingsButton.setAlpha(settingsButton.isEnabled() ? 1f : 0.45f);
@@ -311,7 +339,7 @@ public final class MainActivity extends ThemedActivity {
         if(cameraLoop!=null)out.putBoolean("manual_pause",cameraLoop.isManuallyPaused());super.onSaveInstanceState(out);
     }
     @Override protected void onPause(){
-        foreground=false;uiHandler.removeCallbacks(uiTick);if(voice!=null)voice.disable();
+        foreground=false;pendingVoiceRestart=false;uiHandler.removeCallbacks(uiTick);if(voice!=null)voice.disable();
         if(cameraLoop!=null)cameraLoop.shutdown();if(dimmed)toggleShade();super.onPause();
     }
     @Override public void onBackPressed() {

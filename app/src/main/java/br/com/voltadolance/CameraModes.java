@@ -23,11 +23,25 @@ public final class CameraModes {
     }
     private CameraModes() { }
     public static String backCamera(CameraManager manager) throws Exception {
+        return cameraForFacing(manager,CameraCharacteristics.LENS_FACING_BACK);
+    }
+    public static String cameraForFacing(CameraManager manager,int wanted) throws Exception {
         for(String id:manager.getCameraIdList()) {
             Integer facing=manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
-            if(facing!=null && facing==CameraCharacteristics.LENS_FACING_BACK) return id;
+            if(facing!=null && facing==wanted) return id;
         }
-        throw new IllegalStateException("Câmera traseira não encontrada");
+        throw new IllegalStateException(wanted==CameraCharacteristics.LENS_FACING_FRONT?"Câmera frontal não encontrada":"Câmera traseira não encontrada");
+    }
+    static int chooseModeIndex(List<Mode> available,String requested) {
+        if(available.isEmpty())return -1;
+        for(int i=0;i<available.size();i++)if(available.get(i).key().equals(requested))return i;
+        int w=-1,h=-1;
+        try{String[] size=requested.split("@")[0].split("x");w=Integer.parseInt(size[0]);h=Integer.parseInt(size[1]);}catch(Exception ignored){}
+        int best=-1;
+        for(int i=0;i<available.size();i++){Mode m=available.get(i);if(m.width==w&&m.height==h&&(best<0||m.fps>available.get(best).fps))best=i;}
+        if(best>=0)return best;
+        best=0;for(int i=1;i<available.size();i++){Mode a=available.get(i),b=available.get(best);long area=(long)a.width*a.height,other=(long)b.width*b.height;if(area>other||(area==other&&a.fps>b.fps))best=i;}
+        return best;
     }
     public static List<Mode> detect(CameraCharacteristics cc) {
         List<Mode> result=new ArrayList<>();

@@ -73,7 +73,7 @@ public final class SettingsActivity extends ThemedActivity {
         Switch sw=new Switch(this);sw.setText(label);sw.setTextSize(17);sw.setTextColor(palette.text);sw.setChecked(value);sw.setMinimumHeight(dp(56));sw.setId(id);sw.setPadding(0,dp(10),0,dp(10));
         content.addView(sw,new LinearLayout.LayoutParams(-1,-2));sw.setOnCheckedChangeListener((b,checked)->prefs.edit().putBoolean(key,checked).apply());paragraph(summary);
     }
-    private void choose(String title,String[] options,int selected,java.util.function.IntConsumer handler){new AlertDialog.Builder(this).setTitle(title).setSingleChoiceItems(options,selected,(d,n)->{d.dismiss();handler.accept(n);}).setNegativeButton("Cancelar",null).show();}
+    private void choose(String title,String[] options,int selected,java.util.function.IntConsumer handler){ChoiceDialog.show(this,title,options,selected,handler);}
     private void home() {
         CaptureSettings s=new CaptureSettings(prefs);note("Câmera e voz pausadas nesta tela. Ao voltar, o histórico começa novamente.");
         row("Captura",s.past+" s antes • "+(s.postMinutes==0?"sem limite fixo depois":"até "+s.postMinutes+" min depois"),0,()->show("capture"));
@@ -84,7 +84,7 @@ public final class SettingsActivity extends ThemedActivity {
         row("Energia e espaço","Entenda o consumo e o histórico",0,()->show("energy"));
         row("Planos e benefícios","Demonstração • nenhuma cobrança",R.id.plans_setting,()->show("plans"));
         row("Privacidade e ajuda","Termos do teste e funcionamento",0,()->show("help"));
-        TextView brand=text("LanceVivo • 0.4.0 alfa\nViva a ação. Guarde o momento.",13,false);brand.setTextColor(palette.secondary);brand.setPadding(0,dp(24),0,0);content.addView(brand);
+        TextView brand=text("LanceVivo • 0.4.1 alfa\nViva a ação. Guarde o momento.",13,false);brand.setTextColor(palette.secondary);brand.setPadding(0,dp(24),0,0);content.addView(brand);
     }
     private void capture() {
         CaptureSettings s=new CaptureSettings(prefs);
@@ -100,10 +100,11 @@ public final class SettingsActivity extends ThemedActivity {
     private void quality() {
         try {
             CameraManager manager=(CameraManager)getSystemService(CAMERA_SERVICE);
-            List<CameraModes.Mode> modes=CameraModes.detect(manager.getCameraCharacteristics(CameraModes.backCamera(manager)));
+            CaptureSettings settings=new CaptureSettings(prefs);
+            List<CameraModes.Mode> modes=CameraModes.detect(manager.getCameraCharacteristics(CameraModes.cameraForFacing(manager,settings.facing)));
             if(modes.isEmpty())throw new IllegalStateException();String[] labels=new String[modes.size()];int selected=-1;
             for(int i=0;i<modes.size();i++){labels[i]=modes.get(i).label();if(modes.get(i).key().equals(new CaptureSettings(prefs).mode))selected=i;}
-            choose("Modos informados pelo aparelho",labels,selected,n->{prefs.edit().putString("video_mode",modes.get(n).key()).apply();show("capture");});
+            choose(settings.facing==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?"Qualidade da frontal":"Qualidade da traseira",labels,selected,n->{prefs.edit().putString("video_mode",modes.get(n).key()).apply();show("capture");});
         }catch(Exception e){Toast.makeText(this,"Não foi possível consultar a câmera. A preferência atual foi mantida.",Toast.LENGTH_LONG).show();}
     }
     private void voice() {
@@ -143,7 +144,7 @@ public final class SettingsActivity extends ThemedActivity {
         .setMessage("Plano "+(plan.equals("annual")?"anual: R$ 94,99 por ano":"mensal: R$ 9,99 por mês")+" após 30 dias grátis na proposta.\n\nEsta ação apenas inicia uma demonstração local. Não há pagamento ou renovação real.")
         .setNegativeButton("Agora não",null).setPositiveButton("Iniciar demonstração",(d,n)->{new PlanDemo(prefs).startTrial(System.currentTimeMillis(),plan);show("plans");}).show();}
     private void help(){
-        paragraph("LanceVivo • versão 0.4.0 alfa\nViva a ação. Guarde o momento.");
+        paragraph("LanceVivo • versão 0.4.1 alfa\nViva a ação. Guarde o momento.");
         row("Termos e privacidade do teste","Leia o aviso aceito na primeira abertura",0,()->new AlertDialog.Builder(this).setTitle("Termos e privacidade").setMessage(AlphaNotice.TEXT).setPositiveButton("Fechar",null).show());
         paragraph("Para guardar um lance\n1. Espere HISTÓRICO ATIVO e confira a escuta.\n2. Diga exatamente a frase de início ou toque em Marcar lance. Confira REC e o bip.\n3. Diga exatamente a frase de finalização ou toque em Encerrar e salvar. Espere a confirmação de vídeo salvo.");
         note("Nome e identidade escolhidos para teste; registro de marca e dados do responsável comercial ainda precisam ser concluídos antes do lançamento pago.");
@@ -151,3 +152,4 @@ public final class SettingsActivity extends ThemedActivity {
     private void goBack(){if(page.equals("home"))finish();else{draftStart=null;draftStop=null;startInput=null;stopInput=null;show("home");}}
     @Override public void onBackPressed(){goBack();}
 }
+

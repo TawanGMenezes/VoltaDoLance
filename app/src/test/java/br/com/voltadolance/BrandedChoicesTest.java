@@ -13,4 +13,10 @@ public class BrandedChoicesTest {
   SettingsActivity a=Robolectric.buildActivity(SettingsActivity.class).setup().get();a.findViewById(R.id.appearance_setting).performClick();
   Dialog d=ShadowDialog.getLatestDialog();assertNotNull(d.getWindow().getDecorView().findViewWithTag("choice_2"));
  }
+ @Test public void cancellingChoiceKeepsStoredAppearance() {
+  SettingsActivity a=Robolectric.buildActivity(SettingsActivity.class).setup().get();a.getSharedPreferences("local_settings",0).edit().putString("appearance","light").commit();
+  a.findViewById(R.id.appearance_setting).performClick();Dialog d=ShadowDialog.getLatestDialog();
+  android.view.View cancel=d.getWindow().getDecorView().findViewWithTag("choice_cancel");assertNotNull(cancel);cancel.performClick();
+  assertEquals("light",a.getSharedPreferences("local_settings",0).getString("appearance",null));
+ }
 }

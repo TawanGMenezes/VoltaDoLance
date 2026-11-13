@@ -59,7 +59,7 @@ jobs:
           target: google_apis
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back emulated -camera-front emulated
           script: |
             bash scripts/check-android.sh
       - name: Publicar APK na aba Artifacts
@@ -94,10 +94,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          BUILD_TAG: alpha-0.4.0-${{ github.run_number }}-${{ github.run_attempt }}
+          BUILD_TAG: alpha-0.4.1-${{ github.run_number }}-${{ github.run_attempt }}
           BUILD_SHA: ${{ github.sha }}
         run: |
-          mv apk/app-debug.apk apk/LanceVivo-0.4.0-alpha.apk
-          gh release create "$BUILD_TAG" apk/LanceVivo-0.4.0-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.4.0 alpha" --notes "Identidade LanceVivo, configuracoes organizadas, temas claro/escuro/sistema, aceite dos termos do teste e demonstracao de planos sem cobranca. Captura continua e voz offline preservadas. Validacao fisica no OPPO ainda necessaria."
+          mv apk/app-debug.apk apk/LanceVivo-0.4.1-alpha.apk
+          gh release create "$BUILD_TAG" apk/LanceVivo-0.4.1-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.4.1 alpha" --notes "Identidade LanceVivo, configuracoes organizadas, temas claro/escuro/sistema, aceite dos termos do teste e demonstracao de planos sem cobranca. Captura continua e voz offline preservadas. Validacao fisica no OPPO ainda necessaria."
+
 
 

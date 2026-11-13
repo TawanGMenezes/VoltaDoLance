@@ -3,10 +3,11 @@ package br.com.voltadolance;
 import android.content.SharedPreferences;
 
 final class CaptureSettings {
-    final int past,postMinutes;
+    final int past,postMinutes,facing;
     final String mode,start,stop;
     final boolean voice,sounds;
     CaptureSettings(SharedPreferences p) {
+        facing=p.getInt("camera_facing",android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK)==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT:android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK;
         int history=p.getInt("past",15);past=history==30||history==60?history:15;
         int after=p.getInt("post_minutes",10);
         postMinutes=after==0||after==3||after==20||after==30||after==60?after:10;
