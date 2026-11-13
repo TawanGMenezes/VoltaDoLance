@@ -5,6 +5,9 @@
     <item name="settings_button" type="id" />
     <item name="gallery_button" type="id" />
     <item name="camera_switch" type="id" />
+    <item name="capture_setting" type="id" />
+    <item name="history_setting" type="id" />
+    <item name="duration_setting" type="id" />
     <item name="appearance_setting" type="id" />
     <item name="voice_setting" type="id" />
     <item name="start_phrase" type="id" />

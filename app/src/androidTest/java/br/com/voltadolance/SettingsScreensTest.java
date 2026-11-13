@@ -43,6 +43,10 @@ public class SettingsScreensTest {
                 scenario.onActivity(a->a.findViewById(R.id.appearance_setting).performClick());screenshot(mode+"-appearance-choice");
                 InstrumentationRegistry.getInstrumentation().getUiAutomation().performGlobalAction(1);
                 InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                scenario.onActivity(a->{a.findViewById(R.id.capture_setting).performClick();a.findViewById(R.id.history_setting).performClick();});screenshot(mode+"-history-choice");
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().performGlobalAction(1);InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+                scenario.onActivity(a->a.findViewById(R.id.duration_setting).performClick());screenshot(mode+"-duration-choice");
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().performGlobalAction(1);InstrumentationRegistry.getInstrumentation().waitForIdleSync();scenario.onActivity(SettingsActivity::onBackPressed);
                 scenario.onActivity(a->a.findViewById(R.id.voice_setting).performClick());screenshot(mode+"-voice");
                 scenario.onActivity(a->{((EditText)a.findViewById(R.id.start_phrase)).setText("Peixe na linha");((EditText)a.findViewById(R.id.stop_phrase)).setText("Pode salvar");a.findViewById(R.id.save_phrases).performClick();a.onBackPressed();});
                 scenario.onActivity(a->a.findViewById(R.id.plans_setting).performClick());screenshot(mode+"-plans");

@@ -76,7 +76,7 @@ public final class SettingsActivity extends ThemedActivity {
     private void choose(String title,String[] options,int selected,java.util.function.IntConsumer handler){ChoiceDialog.show(this,title,options,selected,handler);}
     private void home() {
         CaptureSettings s=new CaptureSettings(prefs);note("Câmera e voz pausadas nesta tela. Ao voltar, o histórico começa novamente.");
-        row("Captura",s.past+" s antes • "+(s.postMinutes==0?"sem limite fixo depois":"até "+s.postMinutes+" min depois"),0,()->show("capture"));
+        row("Captura",s.past+" s antes • "+(s.postMinutes==0?"sem limite fixo depois":"até "+s.postMinutes+" min depois"),R.id.capture_setting,()->show("capture"));
         row("Comandos de voz","Personalize suas frases",R.id.voice_setting,()->show("voice"));
         row("Sons e avisos",s.sounds?"Um sinal ao iniciar, dois ao encerrar":"Bipes desligados",0,()->show("sound"));
         String current=AppAppearance.choice(this);int index=java.util.Arrays.asList(AppAppearance.VALUES).indexOf(current);
@@ -89,10 +89,10 @@ public final class SettingsActivity extends ThemedActivity {
     private void capture() {
         CaptureSettings s=new CaptureSettings(prefs);
         note("Antes e depois são tempos diferentes. O histórico não acumula horas de vídeo não marcado.");
-        int[] before={15,30,60};row("Antes de marcar",s.past+" segundos",0,()->choose("Segundos anteriores",new String[]{"15 segundos","30 segundos","60 segundos"},s.past==15?0:s.past==30?1:2,n->{prefs.edit().putInt("past",before[n]).apply();show("capture");}));
+        int[] before={15,30,60};row("Antes de marcar",s.past+" segundos",R.id.history_setting,()->choose("Segundos anteriores",new String[]{"15 segundos","30 segundos","60 segundos"},s.past==15?0:s.past==30?1:2,n->{prefs.edit().putInt("past",before[n]).apply();show("capture");}));
         paragraph("Inclui até esses segundos anteriores ao comando. O trecho antigo que você não marcou é descartado continuamente.");
         int[] after={3,10,20,30,60,0};int selected=1;for(int i=0;i<after.length;i++)if(after[i]==s.postMinutes)selected=i;final int choice=selected;
-        row("Após marcar",s.postMinutes==0?"Sem limite fixo":s.postMinutes+" minutos",0,()->choose("Limite após marcar",new String[]{"3 minutos","10 minutos","20 minutos","30 minutos","60 minutos","Sem limite fixo"},choice,n->{prefs.edit().putInt("post_minutes",after[n]).apply();show("capture");}));
+        row("Após marcar",s.postMinutes==0?"Sem limite fixo":s.postMinutes+" minutos",R.id.duration_setting,()->choose("Limite após marcar",new String[]{"3 minutos","10 minutos","20 minutos","30 minutos","60 minutos","Sem limite fixo"},choice,n->{prefs.edit().putInt("post_minutes",after[n]).apply();show("capture");}));
         paragraph("Tempo máximo da continuação após o comando. Você pode encerrar antes. Sem limite fixo ainda depende de espaço, bateria e temperatura.");
         row("Qualidade solicitada",s.mode.replace("@"," • ")+" fps",0,this::quality);
         paragraph("Somente modos informados pela câmera e pelo codificador do aparelho. Se um modo for rejeitado na abertura, o app tenta uma opção inferior. Não há promessa de 4K ou 60 fps em todos os celulares.");
