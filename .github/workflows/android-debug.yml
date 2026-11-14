@@ -34,8 +34,10 @@ jobs:
           key: vosk-pt-small-0.3-6e1ce909
       - name: Preparar audio de teste sintetico em portugues
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends espeak-ng ffmpeg
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
           bash scripts/prepare-test-audio.sh
       - name: Executar testes unitários
         run: gradle --no-daemon :app:testDebugUnitTest
