@@ -5,8 +5,9 @@ import android.content.SharedPreferences;
 final class CaptureSettings {
     final int past,postMinutes,facing;
     final String mode,start,stop;
-    final boolean voice,sounds;
+    final boolean voice,sounds,dualVideo;
     CaptureSettings(SharedPreferences p) {
+        dualVideo=p.getBoolean("dual_video",false);
         facing=p.getInt("camera_facing",android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK)==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT:android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK;
         int history=p.getInt("past",15);past=history==30||history==60?history:15;
         int after=p.getInt("post_minutes",10);

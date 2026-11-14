@@ -33,6 +33,10 @@ public final class CameraLoop {
     private CameraCaptureSession session;
     private Surface previewSurface;
     private ContinuousRecorder recorder;
+    private DualFrameComposer composer;
+    private DualCameraSession dualSession;
+    private DualCaptureConfig dualConfig;
+    private boolean dualVideo;
     private int pastSeconds=15,orientation=90,generation,modeIndex,facing=CameraCharacteristics.LENS_FACING_BACK;
     private long maxEventMs=600000;
     private boolean running,closing,activityActive=true,safetyPaused,manualPaused,disposed;
@@ -47,13 +51,15 @@ public final class CameraLoop {
     public CaptureState state() { return state; }
     public void setPastSeconds(int seconds) { pastSeconds=seconds; if(recorder!=null) recorder.setPastSeconds(seconds); }
     public void setMode(String key) { requestedMode=key; }
+    public void setDualVideo(boolean enabled){if(!running&&!isCapturing()){dualVideo=enabled;if(enabled)facing=CameraCharacteristics.LENS_FACING_BACK;}}
+    public boolean isDualVideo(){return dualVideo;}
     public void setFacing(int value) {if(!running&&!isCapturing())facing=value==CameraCharacteristics.LENS_FACING_FRONT?value:CameraCharacteristics.LENS_FACING_BACK;}
     public int facing() {return facing;}
     public String lensLabel(){return facing==CameraCharacteristics.LENS_FACING_FRONT?"Frontal":"Traseira";}
-    public String selectedMode(){return modeIndex<0||modeIndex>=modes.size()?requestedMode:modes.get(modeIndex).key();}
+    public String selectedMode(){return dualVideo||modeIndex<0||modeIndex>=modes.size()?requestedMode:modes.get(modeIndex).key();}
     private void persistSelection(){activity.getSharedPreferences("local_settings",0).edit().putInt("camera_facing",facing).putString("video_mode",selectedMode()).apply();}
     public boolean switchCamera() {
-        if(isCapturing()||closing||disposed||rollbackFacing!=null)return false;
+        if(isCapturing()||closing||disposed||dualVideo||rollbackFacing!=null)return false;
         try{
             int destination=facing==CameraCharacteristics.LENS_FACING_BACK?CameraCharacteristics.LENS_FACING_FRONT:CameraCharacteristics.LENS_FACING_BACK;
             CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
@@ -76,7 +82,7 @@ public final class CameraLoop {
     public boolean isCapturing() { return state.isRecording() || state.isSaving(); }
     public boolean isRunning() { return running; }
     public String completionReason() { return safetyNotice; }
-    public String modeLabel() { return modeIndex<0||modeIndex>=modes.size()?"Modo indisponível":modes.get(modeIndex).label(); }
+    public String modeLabel() { return dualVideo&&dualConfig!=null?"Vídeo duplo • "+dualConfig.rearMode.height+"p / 30 fps":modeIndex<0||modeIndex>=modes.size()?"Modo indisponível":modes.get(modeIndex).label(); }
     private void status(String text) { listener.onStatus(text); }
 
     public void start() {
@@ -97,6 +103,7 @@ public final class CameraLoop {
         try {
             String unsafe=unsafeReason();
             if(unsafe!=null) { safetyPaused=true; error(unsafe+" • histórico pausado"); return; }
+            if(dualVideo){startDual();return;}
             CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
             cameraId=CameraModes.cameraForFacing(manager,facing);
             CameraCharacteristics cc=manager.getCameraCharacteristics(cameraId);
@@ -110,6 +117,43 @@ public final class CameraLoop {
         } catch(Exception e) { fail("Não foi possível abrir a câmera: "+e.getMessage()); }
     }
     private boolean current(int token) { return token==generation && running && !closing && activityActive && !disposed; }
+    private void startDual(){
+        running=true;state.preparing();status("Verificando vídeo duplo para este aparelho…");final int token=++generation;
+        final SurfaceTexture texture=preview.getSurfaceTexture();if(texture==null){fallbackDual("Prévia indisponível");return;}
+        final Surface view=new Surface(texture);previewSurface=view;preview.setScaleX(1f);
+        io.execute(()->{
+            ContinuousRecorder prepared=null;DualFrameComposer graph=null;
+            try{
+                DualCameraSupport.Result support=DualCameraSupport.inspect(activity);
+                if(!support.available)throw new IllegalStateException(support.message);
+                final DualCaptureConfig config=support.config;
+                texture.setDefaultBufferSize(config.outputMode.width,config.outputMode.height);
+                prepared=new ContinuousRecorder(activity,config.outputMode,0,pastSeconds,new ContinuousRecorder.Listener(){
+                    public void onPcm(byte[] pcm,int length){listener.onPcm(pcm,length);}
+                    public void onReady(){main.post(()->{if(current(token)){state.ready();status("Vídeo duplo • "+config.rearMode.height+"p / 30 fps • histórico de até "+pastSeconds+" s");}});}
+                    public void onError(String reason){main.post(()->{if(current(token))fallbackDual(reason);});}
+                });
+                graph=new DualFrameComposer(prepared.inputSurface(),view,config.outputMode.width,config.outputMode.height,config.rearMode,config.frontMode,config.rearOrientation,config.frontOrientation,config.rearRealtime,reason->main.post(()->{if(current(token))fallbackDual(reason);}));
+                final ContinuousRecorder owner=prepared;final DualFrameComposer readyGraph=graph;
+                main.post(()->{
+                    if(!current(token)){disposeLater(owner,readyGraph,view);return;}
+                    recorder=owner;composer=readyGraph;dualConfig=config;modes=Collections.singletonList(config.outputMode);modeIndex=0;
+                    dualSession=new DualCameraSession((CameraManager)activity.getSystemService(Context.CAMERA_SERVICE),config,readyGraph.rearSurface(),readyGraph.frontSurface(),main,new DualCameraSession.Listener(){
+                        public void onConfigured(){if(!current(token)){if(dualSession!=null)dualSession.close();return;}owner.start();main.postDelayed(safetyTick,1000);}
+                        public void onError(String reason){if(current(token))fallbackDual(reason);}
+                    });dualSession.start();
+                });
+            }catch(Exception e){if(graph!=null)graph.close();if(prepared!=null)prepared.discard();main.post(()->{if(current(token))fallbackDual("Vídeo duplo indisponível: "+e.getMessage());});}
+        });
+    }
+    private void fallbackDual(String reason){
+        if(!dualVideo)return;
+        dualVideo=false;activity.getSharedPreferences("local_settings",0).edit().putBoolean("dual_video",false).putInt("camera_facing",CameraCharacteristics.LENS_FACING_BACK).apply();
+        if(state.isRecording()){fail(reason);return;}
+        if(state.isSaving())return;
+        stopBuffer();dualConfig=null;modes=Collections.emptyList();modeIndex=0;facing=CameraCharacteristics.LENS_FACING_BACK;state.stopped();
+        listener.onError(reason+" • modo normal mantido");if(activityActive&&!disposed&&!manualPaused&&!safetyPaused)start();
+    }
     private void prepareMode(final int token) {
         final CameraModes.Mode mode=modes.get(modeIndex);
         io.execute(()->{
@@ -166,6 +210,7 @@ public final class CameraLoop {
         } catch(Exception e) { retryMode("Falha ao abrir câmera: "+e.getMessage()); }
     }
     private void retryMode(String reason) {
+        if(dualVideo){fallbackDual(reason);return;}
         if(state.isRecording()) { fail(reason); return; }
         closeCamera(); main.removeCallbacks(safetyTick);
         ContinuousRecorder old=recorder; recorder=null; if(old!=null) io.execute(old::discard);
@@ -184,9 +229,11 @@ public final class CameraLoop {
         closing=true; generation++; main.removeCallbacks(safetyTick);
         status("Salvando vídeo…"+(safetyNotice.isEmpty()?"":" • "+safetyNotice));
         closeCamera(); final ContinuousRecorder owner=recorder; recorder=null;
+        final DualFrameComposer oldGraph=composer;composer=null;final Surface oldView=oldGraph==null?null:previewSurface;if(oldGraph!=null)previewSurface=null;
         io.execute(()->{
             File output=null;
             try {
+                if(oldGraph!=null)oldGraph.close();if(oldView!=null)oldView.release();
                 if(owner==null) throw new IllegalStateException("Captura indisponível");
                 output=File.createTempFile("lance_",".mp4",activity.getCacheDir());
                 owner.finish(output); Uri uri=VideoStore.save(activity,output);
@@ -225,14 +272,19 @@ public final class CameraLoop {
         return null;
     }
     private void closeCamera() {
+        if(dualSession!=null){dualSession.close();dualSession=null;}
         if(session!=null) { try { session.stopRepeating(); } catch(Exception ignored) { } session.close(); session=null; }
         if(camera!=null) { camera.close(); camera=null; }
-        if(previewSurface!=null) { previewSurface.release(); previewSurface=null; }
+        if(previewSurface!=null&&composer==null) { previewSurface.release(); previewSurface=null; }
     }
     private void stopBuffer() {
         generation++; running=false; main.removeCallbacks(safetyTick); closeCamera();
-        ContinuousRecorder old=recorder; recorder=null;
-        if(old!=null) discardLater(old);
+        ContinuousRecorder old=recorder; recorder=null;DualFrameComposer oldGraph=composer;composer=null;Surface oldView=oldGraph==null?null:previewSurface;if(oldGraph!=null)previewSurface=null;
+        if(old!=null||oldGraph!=null)disposeLater(old,oldGraph,oldView);
+    }
+    private void disposeLater(ContinuousRecorder old,DualFrameComposer graph,Surface view){
+        Runnable cleanup=()->{if(graph!=null)graph.close();if(view!=null)view.release();if(old!=null)old.discard();};
+        if(!io.isShutdown())io.execute(cleanup);else{Thread t=new Thread(cleanup,"dual-capture-cleanup");t.setDaemon(true);t.start();}
     }
     private void discardLater(ContinuousRecorder old) {
         if(!io.isShutdown()) { io.execute(old::discard); return; }

@@ -22,6 +22,8 @@ public final class SettingsActivity extends ThemedActivity {
     private String page="home",draftStart,draftStop;
     private EditText startInput,stopInput;
     private int restoreScroll;
+    private int pageGeneration;
+    private final java.util.concurrent.ExecutorService availability=java.util.concurrent.Executors.newSingleThreadExecutor();
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius) {GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     private TextView text(String value,int size,boolean bold) {
@@ -39,7 +41,7 @@ public final class SettingsActivity extends ThemedActivity {
     }
     private void rememberDraft(){if(startInput!=null){draftStart=startInput.getText().toString();draftStop=stopInput.getText().toString();}}
     private void show(String next) {
-        rememberDraft();page=next;startInput=null;stopInput=null;
+        rememberDraft();page=next;pageGeneration++;startInput=null;stopInput=null;
         LinearLayout root=new LinearLayout(this);root.setOrientation(1);root.setBackgroundColor(palette.surface);
         LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(12),dp(8),dp(16),dp(8));
         Button back=new Button(this);back.setText("‹");back.setTextSize(32);back.setTextColor(palette.text);back.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -84,20 +86,22 @@ public final class SettingsActivity extends ThemedActivity {
         row("Energia e espaço","Entenda o consumo e o histórico",0,()->show("energy"));
         row("Planos e benefícios","Demonstração • nenhuma cobrança",R.id.plans_setting,()->show("plans"));
         row("Privacidade e ajuda","Termos do teste e funcionamento",0,()->show("help"));
-        TextView brand=text("LanceVivo • 0.4.1 alfa\nViva a ação. Guarde o momento.",13,false);brand.setTextColor(palette.secondary);brand.setPadding(0,dp(24),0,0);content.addView(brand);
+        TextView brand=text("LanceVivo • 0.5.0 alfa\nViva a ação. Guarde o momento.",13,false);brand.setTextColor(palette.secondary);brand.setPadding(0,dp(24),0,0);content.addView(brand);
     }
     private void capture() {
         CaptureSettings s=new CaptureSettings(prefs);
+        dualOption(s);
         note("Antes e depois são tempos diferentes. O histórico não acumula horas de vídeo não marcado.");
         int[] before={15,30,60};row("Antes de marcar",s.past+" segundos",R.id.history_setting,()->choose("Segundos anteriores",new String[]{"15 segundos","30 segundos","60 segundos"},s.past==15?0:s.past==30?1:2,n->{prefs.edit().putInt("past",before[n]).apply();show("capture");}));
         paragraph("Inclui até esses segundos anteriores ao comando. O trecho antigo que você não marcou é descartado continuamente.");
         int[] after={3,10,20,30,60,0};int selected=1;for(int i=0;i<after.length;i++)if(after[i]==s.postMinutes)selected=i;final int choice=selected;
         row("Após marcar",s.postMinutes==0?"Sem limite fixo":s.postMinutes+" minutos",R.id.duration_setting,()->choose("Limite após marcar",new String[]{"3 minutos","10 minutos","20 minutos","30 minutos","60 minutos","Sem limite fixo"},choice,n->{prefs.edit().putInt("post_minutes",after[n]).apply();show("capture");}));
         paragraph("Tempo máximo da continuação após o comando. Você pode encerrar antes. Sem limite fixo ainda depende de espaço, bateria e temperatura.");
-        row("Qualidade solicitada",s.mode.replace("@"," • ")+" fps",0,this::quality);
+        row(s.dualVideo?"Qualidade no vídeo duplo":"Qualidade solicitada",s.dualVideo?"Automática • até 720p / 30 fps":s.mode.replace("@"," • ")+" fps",0,this::quality);
         paragraph("Somente modos informados pela câmera e pelo codificador do aparelho. Se um modo for rejeitado na abertura, o app tenta uma opção inferior. Não há promessa de 4K ou 60 fps em todos os celulares.");
     }
     private void quality() {
+        if(prefs.getBoolean("dual_video",false)){Toast.makeText(this,"No vídeo duplo a qualidade é ajustada para um formato compatível com as duas câmeras. Desative para escolher a qualidade de uma câmera.",Toast.LENGTH_LONG).show();return;}
         try {
             CameraManager manager=(CameraManager)getSystemService(CAMERA_SERVICE);
             CaptureSettings settings=new CaptureSettings(prefs);
@@ -106,6 +110,21 @@ public final class SettingsActivity extends ThemedActivity {
             for(int i=0;i<modes.size();i++){labels[i]=modes.get(i).label();if(modes.get(i).key().equals(new CaptureSettings(prefs).mode))selected=i;}
             choose(settings.facing==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?"Qualidade da frontal":"Qualidade da traseira",labels,selected,n->{prefs.edit().putString("video_mode",modes.get(n).key()).apply();show("capture");});
         }catch(Exception e){Toast.makeText(this,"Não foi possível consultar a câmera. A preferência atual foi mantida.",Toast.LENGTH_LONG).show();}
+    }
+    private void dualOption(CaptureSettings settings){
+        Switch option=new Switch(this);option.setText("Vídeo duplo");option.setTextSize(18);option.setTextColor(palette.text);option.setMinimumHeight(dp(56));option.setId(R.id.dual_video);option.setTag("dual_video_toggle");option.setEnabled(false);option.setChecked(false);content.addView(option,new LinearLayout.LayoutParams(-1,-2));
+        note("Traseira na imagem principal e frontal no canto superior direito, também no vídeo salvo. Só será ativado quando o celular disponibilizar as duas câmeras juntas para este aplicativo.");
+        TextView status=text("Verificando compatibilidade do aparelho…",14,false);status.setId(R.id.dual_video_status);status.setTextColor(palette.secondary);status.setPadding(0,0,0,dp(16));status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(status);
+        paragraph("Pode reduzir a qualidade e aumentar o consumo de bateria. O histórico e os comandos de voz continuam funcionando. Ativar ou desativar reinicia somente o histórico não marcado ao voltar à câmera.");
+        final int generation=pageGeneration;
+        availability.execute(()->{DualCameraSupport.Result support=DualCameraSupport.inspect(getApplicationContext());runOnUiThread(()->{
+            if(isDestroyed()||isFinishing()||generation!=pageGeneration)return;
+            status.setText(support.message);option.setChecked(support.available&&settings.dualVideo);option.setEnabled(support.available);
+            if(!support.available&&settings.dualVideo){prefs.edit().putBoolean("dual_video",false).apply();show("capture");return;}
+            option.setOnCheckedChangeListener((button,checked)->{
+                SharedPreferences.Editor edit=prefs.edit().putBoolean("dual_video",checked);if(checked)edit.putInt("camera_facing",android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK);edit.apply();show("capture");
+            });
+        });});
     }
     private void voice() {
         CaptureSettings s=new CaptureSettings(prefs);toggle("Comandos de voz ativados","Reconhecimento no aparelho. Nenhum microfone fica ouvindo enquanto você ajusta esta tela.","voice",s.voice,R.id.voice_enabled);
@@ -144,11 +163,12 @@ public final class SettingsActivity extends ThemedActivity {
         .setMessage("Plano "+(plan.equals("annual")?"anual: R$ 94,99 por ano":"mensal: R$ 9,99 por mês")+" após 30 dias grátis na proposta.\n\nEsta ação apenas inicia uma demonstração local. Não há pagamento ou renovação real.")
         .setNegativeButton("Agora não",null).setPositiveButton("Iniciar demonstração",(d,n)->{new PlanDemo(prefs).startTrial(System.currentTimeMillis(),plan);show("plans");}).show();}
     private void help(){
-        paragraph("LanceVivo • versão 0.4.1 alfa\nViva a ação. Guarde o momento.");
+        paragraph("LanceVivo • versão 0.5.0 alfa\nViva a ação. Guarde o momento.");
         row("Termos e privacidade do teste","Leia o aviso aceito na primeira abertura",0,()->new AlertDialog.Builder(this).setTitle("Termos e privacidade").setMessage(AlphaNotice.TEXT).setPositiveButton("Fechar",null).show());
         paragraph("Para guardar um lance\n1. Espere HISTÓRICO ATIVO e confira a escuta.\n2. Diga exatamente a frase de início ou toque em Marcar lance. Confira REC e o bip.\n3. Diga exatamente a frase de finalização ou toque em Encerrar e salvar. Espere a confirmação de vídeo salvo.");
         note("Nome e identidade escolhidos para teste; registro de marca e dados do responsável comercial ainda precisam ser concluídos antes do lançamento pago.");
     }
     private void goBack(){if(page.equals("home"))finish();else{draftStart=null;draftStop=null;startInput=null;stopInput=null;show("home");}}
     @Override public void onBackPressed(){goBack();}
+    @Override protected void onDestroy(){availability.shutdownNow();super.onDestroy();}
 }

@@ -129,6 +129,7 @@ public final class MainActivity extends ThemedActivity {
         cameraLoop.setPastSeconds(past);
         cameraLoop.setMode(modeKey);
         cameraLoop.setFacing(facing);
+        cameraLoop.setDualVideo(preferences.getBoolean("dual_video",false));
         cameraLoop.setPostMinutes(postMinutes);
         voice = new OnDeviceVoice(this, new OnDeviceVoice.Callback() {
             @Override public void onMark() { if (foreground && !navigating && !pendingVoiceRestart) { cameraLoop.markMoment(); refreshButtons(); } }
@@ -150,7 +151,7 @@ public final class MainActivity extends ThemedActivity {
         boolean phrasesChanged=!settings.start.equals(startPhrase)||!settings.stop.equals(stopPhrase);
         past=settings.past;modeKey=settings.mode;postMinutes=settings.postMinutes;facing=settings.facing;
         startPhrase=settings.start;stopPhrase=settings.stop;useVoice=settings.voice;sounds=settings.sounds;
-        if(cameraLoop!=null){cameraLoop.setPastSeconds(past);cameraLoop.setMode(modeKey);cameraLoop.setFacing(facing);cameraLoop.setPostMinutes(postMinutes);}
+        if(cameraLoop!=null){cameraLoop.setPastSeconds(past);cameraLoop.setMode(modeKey);cameraLoop.setFacing(facing);cameraLoop.setDualVideo(settings.dualVideo);cameraLoop.setPostMinutes(postMinutes);}
         if(voice!=null && phrasesChanged)voice.setPhrases(startPhrase,stopPhrase);
     }
     private void buildUi() {
@@ -257,9 +258,9 @@ public final class MainActivity extends ThemedActivity {
         stopButton.setVisibility(active || exporting ? View.VISIBLE : View.GONE);
         settingsButton.setEnabled(!active && !exporting);
         galleryButton.setEnabled(!active && !exporting);
-        cameraSwitchButton.setEnabled(!active&&!exporting&&!pendingVoiceRestart&&state.phase()!=CaptureState.Phase.PREPARING);
+        cameraSwitchButton.setEnabled(!active&&!exporting&&!cameraLoop.isDualVideo()&&!pendingVoiceRestart&&state.phase()!=CaptureState.Phase.PREPARING);
         cameraSwitchButton.setAlpha(cameraSwitchButton.isEnabled()?1f:0.45f);
-        cameraSwitchButton.setContentDescription(cameraLoop.facing()==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?"Trocar para câmera traseira":"Trocar para câmera frontal");
+        cameraSwitchButton.setContentDescription(cameraLoop.isDualVideo()?"Desative Vídeo duplo nas configurações para trocar câmera":cameraLoop.facing()==android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT?"Trocar para câmera traseira":"Trocar para câmera frontal");
         pauseButton.setEnabled(!active && !exporting && !pendingVoiceRestart && cameraLoop.isRunning());
         pauseButton.setAlpha(pauseButton.isEnabled() ? 1f : 0.45f);
         settingsButton.setAlpha(settingsButton.isEnabled() ? 1f : 0.45f);
@@ -271,7 +272,7 @@ public final class MainActivity extends ThemedActivity {
             long seconds = state.elapsed(SystemClock.elapsedRealtime()) / 1000;
             label = String.format(Locale.ROOT, "REC %02d:%02d:%02d", seconds/3600, (seconds/60)%60, seconds%60);
         } else if (exporting) label = "SALVANDO…";
-        else if (state.phase() == CaptureState.Phase.BUFFERING) label = "HISTÓRICO ATIVO";
+        else if (state.phase() == CaptureState.Phase.BUFFERING) label = cameraLoop.isDualVideo()?"VÍDEO DUPLO ATIVO":"HISTÓRICO ATIVO";
         else if (state.phase() == CaptureState.Phase.SAVED) label = "VÍDEO SALVO";
         else if (state.phase() == CaptureState.Phase.ERROR) label = "CAPTURA PAUSADA";
         else if (state.phase() == CaptureState.Phase.STOPPED) label = "CÂMERA PARADA";

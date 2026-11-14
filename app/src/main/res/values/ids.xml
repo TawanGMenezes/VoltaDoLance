@@ -8,6 +8,8 @@
     <item name="capture_setting" type="id" />
     <item name="history_setting" type="id" />
     <item name="duration_setting" type="id" />
+    <item name="dual_video" type="id" />
+    <item name="dual_video_status" type="id" />
     <item name="appearance_setting" type="id" />
     <item name="voice_setting" type="id" />
     <item name="start_phrase" type="id" />
