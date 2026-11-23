@@ -19,6 +19,25 @@ final class DualCameraSession implements AutoCloseable {
     private final CameraDevice[] devices=new CameraDevice[2];
     private final CameraCaptureSession[] sessions=new CameraCaptureSession[2];
     private boolean closed,configuring,started;
+    private final CameraTuning[] tuning=new CameraTuning[2];
+    private final CaptureRequest.Builder[] requests=new CaptureRequest.Builder[2];
+    private float zoom=1f;
+    float[] zoomChoices(){return tuning[0]==null?new float[]{1f}:tuning[0].choices();}
+    float zoomRatio(){return zoom;}
+    String stabilizationLabel(){return tuning[0]==null?"Estabilização • verificando suporte":tuning[0].stabilizationLabel();}
+    boolean setZoom(float value){
+        if(closed||sessions[0]==null||tuning[0]==null)return false;
+        float previous=zoom;
+        try{zoom=tuning[0].apply(requests[0],value);submit(0);return true;}
+        catch(Exception e){try{zoom=tuning[0].apply(requests[0],previous);submit(0);}catch(Exception ignored){}return false;}
+    }
+    private void submit(final int index)throws CameraAccessException{
+        CameraCaptureSession.CaptureCallback feedback=new CameraCaptureSession.CaptureCallback(){
+            @Override public void onCaptureCompleted(CameraCaptureSession session,CaptureRequest request,TotalCaptureResult result){if(!closed&&session==sessions[index])tuning[index].observe(result);}
+        };
+        try{sessions[index].setRepeatingRequest(requests[index].build(),feedback,handler);}
+        catch(IllegalArgumentException e){if(!tuning[index].disableVideoStabilization())throw e;tuning[index].apply(requests[index],index==0?zoom:1f);sessions[index].setRepeatingRequest(requests[index].build(),feedback,handler);}
+    }
     DualCameraSession(CameraManager manager,DualCaptureConfig config,Surface rear,Surface front,Handler handler,Listener listener){
         this.manager=manager;this.config=config;outputs=new Surface[]{rear,front};this.handler=handler;this.listener=listener;
     }
@@ -46,7 +65,7 @@ final class DualCameraSession implements AutoCloseable {
     }
     private void begin(){
         try{
-            CaptureRequest[] requests=new CaptureRequest[2];
+
             for(int i=0;i<2;i++){
                 CaptureRequest.Builder request=devices[i].createCaptureRequest(CameraDevice.TEMPLATE_RECORD);request.addTarget(outputs[i]);
                 request.set(CaptureRequest.CONTROL_MODE,CaptureRequest.CONTROL_MODE_AUTO);
@@ -55,10 +74,13 @@ final class DualCameraSession implements AutoCloseable {
                     int[] rotations=manager.getCameraCharacteristics(i==0?config.rearId:config.frontId).get(CameraCharacteristics.SCALER_AVAILABLE_ROTATE_AND_CROP_MODES);
                     if(rotations!=null&&Arrays.stream(rotations).anyMatch(x->x==CameraMetadata.SCALER_ROTATE_AND_CROP_NONE))request.set(CaptureRequest.SCALER_ROTATE_AND_CROP,CameraMetadata.SCALER_ROTATE_AND_CROP_NONE);
                 }
-                requests[i]=request.build();
+                CameraModes.Mode mode=i==0?config.rearMode:config.frontMode;
+                tuning[i]=CameraTuning.from(manager.getCameraCharacteristics(i==0?config.rearId:config.frontId),mode.width,mode.height,0);
+                float effective=tuning[i].apply(request,i==0?zoom:1f);if(i==0)zoom=effective;
+                requests[i]=request;
             }
             listener.onConfigured();if(closed)return;
-            sessions[0].setRepeatingRequest(requests[0],null,handler);sessions[1].setRepeatingRequest(requests[1],null,handler);
+            submit(0);submit(1);
         }catch(Exception e){fail("Não foi possível iniciar o vídeo duplo: "+e.getMessage());}
     }
     private void fail(String reason){if(closed)return;close();listener.onError(reason);}

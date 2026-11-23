@@ -100,4 +100,4 @@ jobs:
           BUILD_SHA: ${{ github.sha }}
         run: |
           mv apk/app-debug.apk apk/LanceVivo-0.5.0-alpha.apk
-          gh release create "$BUILD_TAG" apk/LanceVivo-0.5.0-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.5.0 alpha" --notes "Seletores padronizados nos temas claro/escuro, icone de galeria reconhecivel e troca traseira/frontal com qualidade compativel e recuperacao de falha. Captura continua e frases exatas preservadas. Planos apenas demonstrativos, sem cobranca. Validacao fisica no OPPO ainda necessaria."
+          gh release create "$BUILD_TAG" apk/LanceVivo-0.5.0-alpha.apk --target "$BUILD_SHA" --prerelease --title "LanceVivo 0.5.0 alpha" --notes "Video duplo com frontal no canto, somente quando o Android liberar captura simultanea. Aproximacao na tela conforme suporte real (ultra-angular, 1x e 2x). Estabilizacao automatica compativel com o modo e estado confirmado pela camera. Historico limitado, voz exata e privacidade local preservados. Planos apenas demonstrativos, sem cobranca. Validacao fisica no OPPO ainda necessaria."

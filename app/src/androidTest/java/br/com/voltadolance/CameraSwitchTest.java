@@ -36,7 +36,11 @@ public class CameraSwitchTest {
    assertEquals(-1f,ui(a->((TextureView)field(a,"preview")).getScaleX()),0f);
    SettingsScreensTest.screenshot("front-camera-ready");long before=newest(c);
    ui(a->{a.findViewById(R.id.mark_moment).performClick();assertTrue(loop(a).state().isRecording());assertFalse(a.findViewById(R.id.camera_switch).isEnabled());assertFalse(loop(a).switchCamera());assertEquals(CameraCharacteristics.LENS_FACING_FRONT,loop(a).facing());return null;});
-   Thread.sleep(2000);ui(a->{a.findViewById(R.id.finish_save).performClick();assertFalse(loop(a).switchCamera());return null;});
+   Object frontSession=ui(a->field(loop(a),"session"));
+   ui(a->{float[] choices=loop(a).zoomChoices();float selected=choices[choices.length-1];assertTrue(loop(a).setZoom(selected));assertEquals(selected,loop(a).zoomRatio(),.001f);assertTrue(loop(a).state().isRecording());return null;});
+   Thread.sleep(2000);assertSame(frontSession,ui(a->field(loop(a),"session")));
+   assertFalse(ui(a->loop(a).stabilizationLabel()).contains("verificando"));
+   ui(a->{a.findViewById(R.id.finish_save).performClick();assertFalse(loop(a).switchCamera());return null;});
    await("Front video was not saved",()->newest(c)>before);await("Front history did not resume",()->ui(a->loop(a).state().canMark()));
    CameraManager manager=(CameraManager)c.getSystemService(Context.CAMERA_SERVICE);int angle=manager.getCameraCharacteristics(CameraModes.cameraForFacing(manager,CameraCharacteristics.LENS_FACING_FRONT)).get(CameraCharacteristics.SENSOR_ORIENTATION);
    try(android.media.MediaMetadataRetriever video=new android.media.MediaMetadataRetriever()){

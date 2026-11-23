@@ -37,6 +37,9 @@ public final class CameraLoop {
     private DualCameraSession dualSession;
     private DualCaptureConfig dualConfig;
     private boolean dualVideo;
+    private CameraTuning tuning;
+    private CaptureRequest.Builder repeatingRequest;
+    private float zoom=1f;
     private int pastSeconds=15,orientation=90,generation,modeIndex,facing=CameraCharacteristics.LENS_FACING_BACK;
     private long maxEventMs=600000;
     private boolean running,closing,activityActive=true,safetyPaused,manualPaused,disposed;
@@ -53,6 +56,25 @@ public final class CameraLoop {
     public void setMode(String key) { requestedMode=key; }
     public void setDualVideo(boolean enabled){if(!running&&!isCapturing()){dualVideo=enabled;if(enabled)facing=CameraCharacteristics.LENS_FACING_BACK;}}
     public boolean isDualVideo(){return dualVideo;}
+    public float previewAspectRatio(){return dualConfig==null?9f/16f:dualConfig.outputMode.width/(float)dualConfig.outputMode.height;}
+    public float[] zoomChoices(){return dualVideo&&dualSession!=null?dualSession.zoomChoices():tuning==null?new float[]{1f}:tuning.choices();}
+    public float zoomRatio(){return dualVideo&&dualSession!=null?dualSession.zoomRatio():zoom;}
+    public String stabilizationLabel(){return !running?"Estabilização • câmera parada":dualVideo&&dualSession!=null?dualSession.stabilizationLabel():tuning==null?"Estabilização • verificando suporte":tuning.stabilizationLabel();}
+    public boolean setZoom(float ratio){
+        if(!running||closing||!(state.canMark()||state.isRecording()))return false;
+        if(dualVideo)return dualSession!=null&&dualSession.setZoom(ratio);
+        if(tuning==null||session==null||repeatingRequest==null)return false;
+        float previous=zoom;
+        try{zoom=tuning.apply(repeatingRequest,ratio);submitRepeating();return true;}
+        catch(Exception e){try{zoom=tuning.apply(repeatingRequest,previous);submitRepeating();}catch(Exception ignored){}listener.onError("Esta aproximação não foi aceita pela câmera");return false;}
+    }
+    private final CameraCaptureSession.CaptureCallback tuningResults=new CameraCaptureSession.CaptureCallback(){
+        @Override public void onCaptureCompleted(CameraCaptureSession owner,CaptureRequest request,TotalCaptureResult result){if(owner==session&&tuning!=null)tuning.observe(result);}
+    };
+    private void submitRepeating()throws CameraAccessException{
+        try{session.setRepeatingRequest(repeatingRequest.build(),tuningResults,main);}
+        catch(IllegalArgumentException e){if(tuning==null||!tuning.disableVideoStabilization())throw e;tuning.apply(repeatingRequest,zoom);session.setRepeatingRequest(repeatingRequest.build(),tuningResults,main);}
+    }
     public void setFacing(int value) {if(!running&&!isCapturing())facing=value==CameraCharacteristics.LENS_FACING_FRONT?value:CameraCharacteristics.LENS_FACING_BACK;}
     public int facing() {return facing;}
     public String lensLabel(){return facing==CameraCharacteristics.LENS_FACING_FRONT?"Frontal":"Traseira";}
@@ -135,15 +157,20 @@ public final class CameraLoop {
                 });
                 graph=new DualFrameComposer(prepared.inputSurface(),view,config.outputMode.width,config.outputMode.height,config.rearMode,config.frontMode,config.rearOrientation,config.frontOrientation,config.rearRealtime,reason->main.post(()->{if(current(token))fallbackDual(reason);}));
                 final ContinuousRecorder owner=prepared;final DualFrameComposer readyGraph=graph;
+                final CaptureHandoff handoff=new CaptureHandoff();
                 main.post(()->{
-                    if(!current(token)){disposeLater(owner,readyGraph,view);return;}
+                    if(!current(token)||!handoff.claim()){handoff.reject();return;}
+                    try{
                     recorder=owner;composer=readyGraph;dualConfig=config;modes=Collections.singletonList(config.outputMode);modeIndex=0;
                     dualSession=new DualCameraSession((CameraManager)activity.getSystemService(Context.CAMERA_SERVICE),config,readyGraph.rearSurface(),readyGraph.frontSurface(),main,new DualCameraSession.Listener(){
                         public void onConfigured(){if(!current(token)){if(dualSession!=null)dualSession.close();return;}owner.start();main.postDelayed(safetyTick,1000);}
                         public void onError(String reason){if(current(token))fallbackDual(reason);}
                     });dualSession.start();
+                    }catch(Exception e){if(current(token))fallbackDual("Falha ao iniciar vídeo duplo: "+e.getMessage());}
+                    finally{handoff.complete();}
                 });
-            }catch(Exception e){if(graph!=null)graph.close();if(prepared!=null)prepared.discard();main.post(()->{if(current(token))fallbackDual("Vídeo duplo indisponível: "+e.getMessage());});}
+                if(!handoff.await(8000)){readyGraph.close();owner.discard();view.release();main.post(()->{if(current(token))fallbackDual("Preparação do vídeo duplo excedeu o tempo");});}
+            }catch(Exception e){if(graph!=null)graph.close();if(prepared!=null)prepared.discard();view.release();main.post(()->{if(current(token))fallbackDual("Vídeo duplo indisponível: "+e.getMessage());});}
         });
     }
     private void fallbackDual(String reason){
@@ -165,10 +192,13 @@ public final class CameraLoop {
                     }
                     public void onError(String message) { main.post(()->{ if(current(token)) fail(message); }); }
                 });
+                CaptureHandoff handoff=new CaptureHandoff();
                 main.post(()->{
-                    if(!current(token)) { discardLater(prepared); return; }
-                    recorder=prepared; openCamera(token,mode,prepared);
+                    if(!current(token)||!handoff.claim()){handoff.reject();return;}
+                    try{recorder=prepared;openCamera(token,mode,prepared);}
+                    finally{handoff.complete();}
                 });
+                if(!handoff.await(8000)){prepared.discard();main.post(()->{if(current(token))retryMode("Preparação da câmera excedeu o tempo");});
             } catch(Exception e) { main.post(()->{ if(current(token)) retryMode("Modo indisponível: "+e.getMessage()); }); }
         });
     }
@@ -189,12 +219,14 @@ public final class CameraLoop {
                         request.addTarget(view); request.addTarget(owner.inputSurface());
                         request.set(CaptureRequest.CONTROL_MODE,CaptureRequest.CONTROL_MODE_AUTO);
                         request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,mode.aeRange);
+                        tuning=CameraTuning.from(manager.getCameraCharacteristics(cameraId),mode.width,mode.height,mode.fps);
+                        zoom=tuning.apply(request,zoom);repeatingRequest=request;
                         device.createCaptureSession(Arrays.asList(view,owner.inputSurface()),new CameraCaptureSession.StateCallback() {
                             public void onConfigured(CameraCaptureSession configured) {
                                 if(!current(token)) { configured.close(); return; }
                                 session=configured;
                                 try {
-                                    configured.setRepeatingRequest(request.build(),null,main);
+                                    submitRepeating();
                                     owner.start(); main.postDelayed(safetyTick,1000);
                                 } catch(Exception e) { retryMode("Não foi possível iniciar captura: "+e.getMessage()); }
                             }
@@ -272,6 +304,7 @@ public final class CameraLoop {
         return null;
     }
     private void closeCamera() {
+        repeatingRequest=null;tuning=null;
         if(dualSession!=null){dualSession.close();dualSession=null;}
         if(session!=null) { try { session.stopRepeating(); } catch(Exception ignored) { } session.close(); session=null; }
         if(camera!=null) { camera.close(); camera=null; }

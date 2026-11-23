@@ -22,3 +22,12 @@ Native Java/Camera2 remains. One ContinuousRecorder AVC/AAC stream and one Audio
 - [ ] Review, Actions full suite/build/install/screenshot inspection; publish 0.5.0-alpha code7 on main only after success, verify direct release link.
 
 Physical OPPO validation remains required for reported availability, two actual Camera2 sessions, orientation, fluency, sound/voice and heat/battery. No unsupported 4K dual promise. Maintain saved videos/package/signing identity and leave all commercial features inactive.
+
+## Added on 2026-11-23: zoom and automatic stabilization
+
+- Offer actual logical-camera zoom minimum below 1x (e.g. 0.6x), 1x and 2x only within reported range. Legacy API29 uses centered sensor crop and never advertises ultrawide. No claim that every physical lens is exposed to third-party apps.
+- Update repeating requests without restarting encoder/session or clearing marked history. Clamp on source change; dual changes rear only.
+- Request advertised video stabilization inside Android guaranteed direct-encoder 1080p30 envelope, otherwise optical if advertised. Dual GL surfaces conservatively use optical. Never combine EIS/OIS. Rejected EIS retries once without video stabilization. Show actual capture-result status, not request alone.
+- UI choices have 48dp targets, remain usable during recording, disabled during preparing/saving. Dual preview is fitted between top and bottom controls so inset remains visible.
+- Preparation worker retains GPU producer ownership until main-thread handoff, and cleans rejected preparations before the next serial allocation.
+- Verify policy/UI tests plus native live zoom retaining the same camera session and a saved clip. Physical OPPO handshake and shake/battery performance remain device tests.

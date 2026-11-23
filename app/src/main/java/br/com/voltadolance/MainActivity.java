@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Matrix;
+import java.util.Arrays;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -40,6 +42,13 @@ public final class MainActivity extends ThemedActivity {
     private CameraLoop cameraLoop;
     private volatile OnDeviceVoice voice;
     private TextureView preview;
+    private LinearLayout zoomChoicesRow;
+    private TextView stabilizationHint;
+    private float[] displayedZoomChoices = new float[0];
+    private FrameLayout previewRoot;
+    private View captureToolsPanel, bottomControls;
+    private boolean lastDualPreview;
+    private float lastPreviewAspect;
     private TextView subtitle;
     private TextView stateLabel;
     private Button recordButton;
@@ -155,7 +164,7 @@ public final class MainActivity extends ThemedActivity {
         if(voice!=null && phrasesChanged)voice.setPhrases(startPhrase,stopPhrase);
     }
     private void buildUi() {
-        FrameLayout root=new FrameLayout(this);root.setBackgroundColor(palette.background);
+        FrameLayout root=new FrameLayout(this);previewRoot=root;root.setBackgroundColor(palette.background);
         preview=new TextureView(this);root.addView(preview,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(16),dp(10),dp(12),dp(10));top.setBackgroundColor(palette.surface);
@@ -194,12 +203,15 @@ public final class MainActivity extends ThemedActivity {
         LinearLayout.LayoutParams utilityLp=new LinearLayout.LayoutParams(0,-2,1);utilityLp.topMargin=dp(10);utilities.addView(hide,utilityLp);
         LinearLayout.LayoutParams pauseLp=new LinearLayout.LayoutParams(0,-2,1);pauseLp.topMargin=dp(10);pauseLp.leftMargin=dp(8);utilities.addView(pauseButton,pauseLp);bottom.addView(utilities);
         android.widget.ScrollView controls=new android.widget.ScrollView(this);controls.setFillViewport(false);controls.addView(bottom);
-        FrameLayout.LayoutParams bottomLp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);bottomLp.setMargins(dp(12),0,dp(12),dp(12));root.addView(controls,bottomLp);
+        FrameLayout.LayoutParams bottomLp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);bottomLp.setMargins(dp(12),0,dp(12),dp(12));root.addView(controls,bottomLp);bottomControls=controls;
         // Keep controls reachable on smaller screens and large fonts without covering the header.
         root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
             int available=root.getHeight()-root.getPaddingTop()-root.getPaddingBottom()-top.getHeight()-dp(86);
-            int wanted=bottom.getMeasuredHeight();int h=Math.max(dp(100),Math.min(wanted,available));
+            int wanted=bottom.getMeasuredHeight();
+            if(cameraLoop!=null&&cameraLoop.isDualVideo())available=Math.min(available,Math.max(dp(100),root.getHeight()/3));
+            int h=Math.max(dp(100),Math.min(wanted,available));
             if(bottomLp.height!=h){bottomLp.height=h;controls.setLayoutParams(bottomLp);}
+            updatePreviewLayout();
         });
         TextView black=text("Prévia oculta\n\nCâmera e voz continuam ativas.\nToque para voltar",18,0xFFFFFFFF,true);black.setGravity(Gravity.CENTER);black.setBackgroundColor(Color.BLACK);black.setOnClickListener(v->toggleShade());black.setVisibility(View.GONE);shade=black;root.addView(shade,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout indicator=new LinearLayout(this);indicator.setGravity(Gravity.CENTER);indicator.setPadding(dp(14),dp(8),dp(14),dp(8));indicator.setBackground(bg(0xFF172B4D,14));
@@ -208,8 +220,19 @@ public final class MainActivity extends ThemedActivity {
         captureTools.addView(indicator,new LinearLayout.LayoutParams(0,-2,1));
         cameraSwitchButton=iconButton(R.drawable.ic_switch_camera,"Trocar câmera");cameraSwitchButton.setId(R.id.camera_switch);cameraSwitchButton.setOnClickListener(v->switchCamera());
         LinearLayout.LayoutParams switchLp=new LinearLayout.LayoutParams(dp(52),dp(52));switchLp.leftMargin=dp(10);captureTools.addView(cameraSwitchButton,switchLp);
-        FrameLayout.LayoutParams recLp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);recLp.topMargin=dp(92);root.addView(captureTools,recLp);
-        top.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{recLp.topMargin=b-root.getPaddingTop()+dp(10);captureTools.setLayoutParams(recLp);});
+        LinearLayout toolsPanel=new LinearLayout(this);toolsPanel.setOrientation(1);captureToolsPanel=toolsPanel;
+        toolsPanel.addView(captureTools,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout zoomPanel=new LinearLayout(this);zoomPanel.setGravity(Gravity.CENTER);zoomPanel.setPadding(dp(12),dp(6),dp(12),0);
+        zoomChoicesRow=new LinearLayout(this);zoomChoicesRow.setGravity(Gravity.CENTER);zoomChoicesRow.setContentDescription("Zoom da câmera");
+        zoomPanel.addView(zoomChoicesRow,new LinearLayout.LayoutParams(-2,-2));
+        stabilizationHint=text("",12,0xFFFFFFFF,false);stabilizationHint.setPadding(dp(12),dp(8),dp(12),dp(8));stabilizationHint.setBackground(bg(0xDD172B4D,14));
+        zoomPanel.addView(stabilizationHint,new LinearLayout.LayoutParams(0,-2,1));
+        toolsPanel.addView(zoomPanel,new LinearLayout.LayoutParams(-1,-2));
+        FrameLayout.LayoutParams recLp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);recLp.topMargin=dp(92);root.addView(toolsPanel,recLp);
+        toolsPanel.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->updatePreviewLayout());
+        controls.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->updatePreviewLayout());
+        preview.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->fitDualPreview());
+        top.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{recLp.topMargin=b-root.getPaddingTop()+dp(10);toolsPanel.setLayoutParams(recLp);});
         setContentView(root);refreshButtons();
     }
     private android.widget.ImageButton iconButton(int icon,String label){
@@ -280,7 +303,57 @@ public final class MainActivity extends ThemedActivity {
         recLabel.setText(label);
         recLabel.setTextColor(active ? 0xFFFFB4A5 : 0xFFFFFFFF);
         historyHint.setText("Até " + past + " s antes • " + durationLabel() + " após marcar");
+        refreshCameraTools(state);
         refreshAppearanceIfNeeded();
+    }
+    private void refreshCameraTools(CaptureState state) {
+        float[] choices=cameraLoop.zoomChoices();
+        if(!Arrays.equals(choices,displayedZoomChoices)){
+            displayedZoomChoices=choices.clone();zoomChoicesRow.removeAllViews();
+            for(float ratio:choices){
+                String label=String.format(Locale.ROOT,ratio==(int)ratio?"%.0f×":"%.1f×",ratio);
+                Button choice=button(label,palette.tint,WHITE);choice.setTag(ratio);
+                choice.setMinWidth(dp(48));choice.setMinimumWidth(dp(48));choice.setMinHeight(dp(48));choice.setMinimumHeight(dp(48));
+                choice.setPadding(dp(10),0,dp(10),0);choice.setContentDescription("Zoom "+label);
+                choice.setOnClickListener(v->{if(cameraLoop.setZoom(ratio))refreshButtons();});
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(48));lp.rightMargin=dp(4);zoomChoicesRow.addView(choice,lp);
+            }
+        }
+        boolean enabled=state.phase()==CaptureState.Phase.BUFFERING||state.phase()==CaptureState.Phase.RECORDING;
+        float current=cameraLoop.zoomRatio();
+        for(int i=0;i<zoomChoicesRow.getChildCount();i++){
+            Button choice=(Button)zoomChoicesRow.getChildAt(i);boolean selected=Math.abs((Float)choice.getTag()-current)<0.025f;
+            if(choice.isSelected()!=selected){
+                choice.setSelected(selected);choice.setTextColor(selected?0xFF172B4D:WHITE);
+                choice.setBackground(bg(selected?ACCENT:palette.tint,24));
+            }
+            choice.setEnabled(enabled);choice.setAlpha(enabled?1f:0.45f);
+            choice.setContentDescription("Zoom "+choice.getText()+(selected?", selecionado":""));
+        }
+        String stabilization=cameraLoop.stabilizationLabel();
+        if(!stabilization.contentEquals(stabilizationHint.getText()))stabilizationHint.setText(stabilization);
+        stabilizationHint.setVisibility(stabilization.isEmpty()?View.GONE:View.VISIBLE);
+        boolean dual=cameraLoop.isDualVideo();float aspect=cameraLoop.previewAspectRatio();
+        if(dual!=lastDualPreview||Math.abs(aspect-lastPreviewAspect)>0.001f){
+            if(lastDualPreview&&!dual)preview.setTransform(new Matrix());
+            lastDualPreview=dual;lastPreviewAspect=aspect;previewRoot.requestLayout();updatePreviewLayout();
+        }
+    }
+    private void updatePreviewLayout(){
+        if(cameraLoop==null||previewRoot==null||captureToolsPanel==null)return;
+        FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)preview.getLayoutParams();
+        boolean dual=cameraLoop.isDualVideo();
+        int top=dual?captureToolsPanel.getBottom()+dp(8):0;
+        int bottom=dual?Math.max(0,previewRoot.getHeight()-bottomControls.getTop())+dp(8):0;
+        if(lp.topMargin!=top||lp.bottomMargin!=bottom){lp.topMargin=top;lp.bottomMargin=bottom;preview.setLayoutParams(lp);}
+        if(dual)fitDualPreview();
+    }
+    private void fitDualPreview(){
+        if(cameraLoop==null||!cameraLoop.isDualVideo()||preview.getWidth()==0||preview.getHeight()==0)return;
+        float aspect=cameraLoop.previewAspectRatio();if(aspect<=0)return;
+        float width=preview.getWidth(),height=preview.getHeight();
+        float fittedWidth=Math.min(width,height*aspect),fittedHeight=fittedWidth/aspect;
+        Matrix fit=new Matrix();fit.setScale(fittedWidth/width,fittedHeight/height,width/2f,height/2f);preview.setTransform(fit);
     }
     private void requestPermissionsIfNeeded() {
         if(!AlphaNotice.accepted(this)){showNotice();return;}

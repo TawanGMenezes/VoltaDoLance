@@ -40,7 +40,18 @@ public class DualFrameComposerTest {
   try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
    // Pause the ordinary activity-owned camera/mic before allocating the synthetic recorder.
    scenario.onActivity(a->{activity.set(a);try{java.lang.reflect.Field field=MainActivity.class.getDeclaredField("cameraLoop");field.setAccessible(true);((CameraLoop)field.get(a)).pauseHistory();}catch(Exception e){throw new AssertionError(e);}});
-   Thread.sleep(1500);
+   AtomicReference<ExecutorService> captureIo=new AtomicReference<>();
+   scenario.onActivity(a->{try{
+    java.lang.reflect.Field loopField=MainActivity.class.getDeclaredField("cameraLoop");loopField.setAccessible(true);
+    java.lang.reflect.Field ioField=CameraLoop.class.getDeclaredField("io");ioField.setAccessible(true);
+    captureIo.set((ExecutorService)ioField.get(loopField.get(a)));
+   }catch(Exception e){throw new AssertionError(e);}});
+   // A preparation completion may post its stale-resource cleanup after the first
+   // main-thread idle. Drain both queues twice before claiming the microphone.
+   InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+   captureIo.get().submit(()->{}).get(15,TimeUnit.SECONDS);
+   InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+   captureIo.get().submit(()->{}).get(15,TimeUnit.SECONDS);
    try{
     recorder=new ContinuousRecorder(activity.get(),mode(480,640),0,3,new ContinuousRecorder.Listener(){public void onReady(){ready.countDown();}public void onPcm(byte[] bytes,int length){pcmBytes.addAndGet(length);}public void onError(String message){failure.compareAndSet(null,message);}});
     composer=new DualFrameComposer(recorder.inputSurface(),null,480,640,mode(640,480),mode(320,240),90,270,false,message->failure.compareAndSet(null,message));
