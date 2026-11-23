@@ -198,7 +198,7 @@ public final class CameraLoop {
                     try{recorder=prepared;openCamera(token,mode,prepared);}
                     finally{handoff.complete();}
                 });
-                if(!handoff.await(8000)){prepared.discard();main.post(()->{if(current(token))retryMode("Preparação da câmera excedeu o tempo");});
+                if(!handoff.await(8000)){prepared.discard();main.post(()->{if(current(token))retryMode("Preparação da câmera excedeu o tempo");});}
             } catch(Exception e) { main.post(()->{ if(current(token)) retryMode("Modo indisponível: "+e.getMessage()); }); }
         });
     }
