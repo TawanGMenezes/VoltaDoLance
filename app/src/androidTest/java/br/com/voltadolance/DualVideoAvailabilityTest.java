@@ -37,6 +37,7 @@ public class DualVideoAvailabilityTest {
    AtomicReference<Boolean> ready=new AtomicReference<>(false);long deadline=SystemClock.elapsedRealtime()+45000;
    do{main.onActivity(a->ready.set(loop(a).state().canMark()));if(ready.get())break;Thread.sleep(100);}while(SystemClock.elapsedRealtime()<deadline);
    assertTrue("Advertised concurrent cameras did not become ready",ready.get());
+   SettingsScreensTest.screenshot("dual-camera-ready");
    main.onActivity(a->{assertTrue("Concurrent startup silently fell back",loop(a).isDualVideo());assertFalse(a.findViewById(R.id.camera_switch).isEnabled());a.findViewById(R.id.mark_moment).performClick();assertTrue(loop(a).state().isRecording());assertFalse(loop(a).switchCamera());});
    Thread.sleep(2000);main.onActivity(a->a.findViewById(R.id.finish_save).performClick());deadline=SystemClock.elapsedRealtime()+30000;while(newest(target)<=before&&SystemClock.elapsedRealtime()<deadline)Thread.sleep(100);assertTrue("Concurrent clip not saved",newest(target)>before);
    SettingsScreensTest.screenshot("dual-camera-saved");

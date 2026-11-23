@@ -15,10 +15,10 @@ Native Java/Camera2 remains. One ContinuousRecorder AVC/AAC stream and one Audio
 
 ## Execution
 
-- [ ] Regression test missing dual toggle, then support-policy and layout tests.
-- [ ] Independent support detector/config + tests; independent GL compositor/layout + native encoder pixel proof. Root handles settings/session integration only. Shared API above is fixed; components edit disjoint files.
-- [ ] Integrate lifecycle, one mic, voice, limited pre-roll, thermal/space/battery guards. Normal capture regressions remain.
-- [ ] Native test: synthetic red rear + green front surfaces compose into an actual saved AVC/AAC file; decode frame to verify green only in upper-right, rear elsewhere, monotonic times, history included. Emulated phone may not advertise concurrent cameras; separately test correct unsupported gating. Do not claim physical concurrent capture tested if unavailable.
+- [x] Regression test missing dual toggle, then support-policy and layout tests.
+- [x] Independent support detector/config + tests; independent GL compositor/layout + native encoder pixel proof. Root handles settings/session integration only. Shared API above is fixed; components edit disjoint files.
+- [x] Integrate lifecycle, one mic, voice, limited pre-roll, thermal/space/battery guards. Normal capture regressions remain.
+- [x] Native test: synthetic red rear + green front surfaces compose into an actual saved AVC/AAC file; decode frame to verify green only in upper-right, rear elsewhere, monotonic times, history included. Emulated phone may not advertise concurrent cameras; separately test correct unsupported gating. Do not claim physical concurrent capture tested if unavailable.
 - [ ] Review, Actions full suite/build/install/screenshot inspection; publish 0.5.0-alpha code7 on main only after success, verify direct release link.
 
 Physical OPPO validation remains required for reported availability, two actual Camera2 sessions, orientation, fluency, sound/voice and heat/battery. No unsupported 4K dual promise. Maintain saved videos/package/signing identity and leave all commercial features inactive.
@@ -35,3 +35,5 @@ Physical OPPO validation remains required for reported availability, two actual 
 ## Alpha signing continuity
 
 The old Actions cache was missing after inactivity on 2026-11-23, so its private debug key could not be recovered from APKs. A new alpha-only RSA signing key is stored in the encrypted repository secret LANCEVIVO_DEBUG_KEYSTORE_BASE64, with a local non-repository backup. Workflow restores this secret and fails closed on same-repository builds when absent. External fork PRs can use ephemeral test signing and never release. Do not reuse this alpha key for a production Play release. Existing 0.4.x installs may require uninstalling once; saved gallery videos remain, local preferences/acceptance reset. No private key or base64 value is committed.
+
+Branch 744cac0 validation: all 82 JVM/UI tests and 6 Android 15 tests passed. Emulator advertised a usable concurrent pair; two real emulated Camera2 sessions opened and a combined clip was saved, in addition to synthetic GPU pixel verification. Single-camera continuity max AVC gap 95,123 us and AAC 64,000 us, same thresholds. APK certificate check revealed AGP was using its own default debug store rather than the restored secret: final workflow now explicitly binds signingConfigs.debug to LANCEVIVO_DEBUG_KEYSTORE and asserts the expected public certificate fingerprint before release. Final main build must confirm it.
