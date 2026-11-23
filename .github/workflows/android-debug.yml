@@ -22,11 +22,21 @@ jobs:
           gradle-version: '8.13'
       - name: Instalar SDK 36
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Manter assinatura de teste entre builds
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: voltadolance-debug-keystore-v1
+      - name: Restaurar assinatura permanente de teste
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.LANCEVIVO_DEBUG_KEYSTORE_BASE64 }}
+          IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [[ -n "$DEBUG_KEYSTORE_BASE64" ]]; then
+            umask 077
+            mkdir -p "$HOME/.android"
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          elif [[ "$IS_FORK" == "true" ]]; then
+            echo 'Fork validation uses an ephemeral debug key; no APK is released.'
+          else
+            echo '::error::Permanent alpha signing key is missing.'
+            exit 1
+          fi
       - name: Cache do modelo offline em portugues
         uses: actions/cache@v4
         with:
@@ -40,7 +50,7 @@ jobs:
         run: gradle --no-daemon :app:assembleDebug
       - name: Verificar assinatura e versão do APK
         run: |
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | head -n 1
       - name: Habilitar aceleracao do Android de teste

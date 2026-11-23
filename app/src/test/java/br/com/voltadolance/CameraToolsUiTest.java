@@ -60,8 +60,11 @@ public class CameraToolsUiTest {
             FrameLayout root=(FrameLayout)field(a,"previewRoot");
             for(int i=0;i<4;i++){root.measure(View.MeasureSpec.makeMeasureSpec(1080,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(1920,View.MeasureSpec.EXACTLY));root.layout(0,0,1080,1920);}
             TextureView preview=(TextureView)field(a,"preview");View tools=(View)field(a,"captureToolsPanel"),controls=(View)field(a,"bottomControls");
-            assertTrue(preview.getTop()>=tools.getBottom());assertTrue(preview.getBottom()<=controls.getTop());assertTrue(preview.getHeight()>0);
-            assertTrue(controls.getHeight()<=root.getHeight()/3+1);
+            String geometry="preview="+preview.getTop()+".."+preview.getBottom()+", toolsBottom="+tools.getBottom()+", controlsTop="+controls.getTop();
+            assertTrue(geometry,preview.getTop()>=tools.getBottom());
+            assertTrue(geometry,preview.getBottom()<=controls.getTop());
+            assertTrue(geometry,preview.getHeight()>0);
+            assertTrue("controls height="+controls.getHeight()+", root height="+root.getHeight(),controls.getHeight()<=root.getHeight()/3+1);
             float[] values=new float[9];preview.getTransform(new Matrix()).getValues(values);
             assertEquals(1f,values[Matrix.MSCALE_X],0f);assertEquals(1f,values[Matrix.MSCALE_Y],0f);
             // GPU compositor owns aspect fitting; TextureView must not fit a second time.

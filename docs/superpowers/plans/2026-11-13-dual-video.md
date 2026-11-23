@@ -31,3 +31,7 @@ Physical OPPO validation remains required for reported availability, two actual 
 - UI choices have 48dp targets, remain usable during recording, disabled during preparing/saving. Dual preview is fitted between top and bottom controls so inset remains visible.
 - Preparation worker retains GPU producer ownership until main-thread handoff, and cleans rejected preparations before the next serial allocation.
 - Verify policy/UI tests plus native live zoom retaining the same camera session and a saved clip. Physical OPPO handshake and shake/battery performance remain device tests.
+
+## Alpha signing continuity
+
+The old Actions cache was missing after inactivity on 2026-11-23, so its private debug key could not be recovered from APKs. A new alpha-only RSA signing key is stored in the encrypted repository secret LANCEVIVO_DEBUG_KEYSTORE_BASE64, with a local non-repository backup. Workflow restores this secret and fails closed on same-repository builds when absent. External fork PRs can use ephemeral test signing and never release. Do not reuse this alpha key for a production Play release. Existing 0.4.x installs may require uninstalling once; saved gallery videos remain, local preferences/acceptance reset. No private key or base64 value is committed.

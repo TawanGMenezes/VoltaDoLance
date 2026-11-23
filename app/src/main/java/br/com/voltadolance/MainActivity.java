@@ -46,7 +46,7 @@ public final class MainActivity extends ThemedActivity {
     private TextView stabilizationHint;
     private float[] displayedZoomChoices = new float[0];
     private FrameLayout previewRoot;
-    private View captureToolsPanel, bottomControls;
+    private View captureToolsPanel, bottomControls, captureHeader, bottomContent;
     private boolean lastDualPreview;
     private float lastPreviewAspect;
     private TextView subtitle;
@@ -164,7 +164,30 @@ public final class MainActivity extends ThemedActivity {
         if(voice!=null && phrasesChanged)voice.setPhrases(startPhrase,stopPhrase);
     }
     private void buildUi() {
-        FrameLayout root=new FrameLayout(this);previewRoot=root;root.setBackgroundColor(palette.background);
+        FrameLayout root=new FrameLayout(this){
+            @Override protected void onMeasure(int widthSpec,int heightSpec){
+                super.onMeasure(widthSpec,heightSpec);
+                if(bottomControls==null||bottomContent==null||captureHeader==null)return;
+                int available=getMeasuredHeight()-getPaddingTop()-getPaddingBottom()-captureHeader.getMeasuredHeight()-dp(86);
+                if(cameraLoop!=null&&cameraLoop.isDualVideo())available=Math.min(available,Math.max(dp(100),getMeasuredHeight()/3));
+                int wanted=Math.max(dp(100),Math.min(bottomContent.getMeasuredHeight(),available));
+                FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)bottomControls.getLayoutParams();
+                if(lp.height!=wanted){lp.height=wanted;bottomControls.setLayoutParams(lp);super.onMeasure(widthSpec,heightSpec);}
+            }
+            @Override protected void onLayout(boolean changed,int l,int t,int r,int b){
+                super.onLayout(changed,l,t,r,b);
+                updatePreviewLayout();
+                // Sibling positions are final here. Apply bounds now rather than relying on
+                // a second traversal requested from a child's layout callback.
+                if(cameraLoop!=null&&cameraLoop.isDualVideo()){
+                    FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)preview.getLayoutParams();
+                    int width=getWidth()-getPaddingLeft()-getPaddingRight();
+                    int height=Math.max(0,getHeight()-getPaddingTop()-getPaddingBottom()-lp.topMargin-lp.bottomMargin);
+                    preview.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY));
+                    preview.layout(getPaddingLeft(),getPaddingTop()+lp.topMargin,getPaddingLeft()+width,getPaddingTop()+lp.topMargin+height);
+                }
+            }
+        };previewRoot=root;root.setBackgroundColor(palette.background);
         preview=new TextureView(this);root.addView(preview,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
         top.setPadding(dp(16),dp(10),dp(12),dp(10));top.setBackgroundColor(palette.surface);
@@ -178,9 +201,9 @@ public final class MainActivity extends ThemedActivity {
         galleryButton.setOnClickListener(v->navigate(GalleryActivity.class));top.addView(galleryButton,new LinearLayout.LayoutParams(dp(48),dp(48)));
         settingsButton=button("⚙",palette.tint,WHITE);settingsButton.setId(R.id.settings_button);settingsButton.setContentDescription("Abrir configurações");
         settingsButton.setOnClickListener(v->openSettings());LinearLayout.LayoutParams gearLp=new LinearLayout.LayoutParams(dp(48),dp(48));gearLp.leftMargin=dp(8);top.addView(settingsButton,gearLp);
-        root.addView(top,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+        captureHeader=top;root.addView(top,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
 
-        LinearLayout bottom=new LinearLayout(this);bottom.setOrientation(1);bottom.setPadding(dp(18),dp(14),dp(18),dp(16));bottom.setBackground(bg(palette.surface,20));
+        LinearLayout bottom=new LinearLayout(this);bottomContent=bottom;bottom.setOrientation(1);bottom.setPadding(dp(18),dp(14),dp(18),dp(16));bottom.setBackground(bg(palette.surface,20));
         stateLabel=text("Preparando câmera…",14,palette.secondary,true);stateLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);bottom.addView(stateLabel);
         savedNotice=text("",14,palette.dark?0xFF95E1B5:0xFF14633A,true);savedNotice.setVisibility(View.GONE);bottom.addView(savedNotice);
         historyHint=text("",12,palette.secondary,false);historyHint.setPadding(0,dp(6),0,dp(6));bottom.addView(historyHint);
@@ -204,15 +227,6 @@ public final class MainActivity extends ThemedActivity {
         LinearLayout.LayoutParams pauseLp=new LinearLayout.LayoutParams(0,-2,1);pauseLp.topMargin=dp(10);pauseLp.leftMargin=dp(8);utilities.addView(pauseButton,pauseLp);bottom.addView(utilities);
         android.widget.ScrollView controls=new android.widget.ScrollView(this);controls.setFillViewport(false);controls.addView(bottom);
         FrameLayout.LayoutParams bottomLp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);bottomLp.setMargins(dp(12),0,dp(12),dp(12));root.addView(controls,bottomLp);bottomControls=controls;
-        // Keep controls reachable on smaller screens and large fonts without covering the header.
-        root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
-            int available=root.getHeight()-root.getPaddingTop()-root.getPaddingBottom()-top.getHeight()-dp(86);
-            int wanted=bottom.getMeasuredHeight();
-            if(cameraLoop!=null&&cameraLoop.isDualVideo())available=Math.min(available,Math.max(dp(100),root.getHeight()/3));
-            int h=Math.max(dp(100),Math.min(wanted,available));
-            if(bottomLp.height!=h){bottomLp.height=h;controls.setLayoutParams(bottomLp);}
-            updatePreviewLayout();
-        });
         TextView black=text("Prévia oculta\n\nCâmera e voz continuam ativas.\nToque para voltar",18,0xFFFFFFFF,true);black.setGravity(Gravity.CENTER);black.setBackgroundColor(Color.BLACK);black.setOnClickListener(v->toggleShade());black.setVisibility(View.GONE);shade=black;root.addView(shade,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout indicator=new LinearLayout(this);indicator.setGravity(Gravity.CENTER);indicator.setPadding(dp(14),dp(8),dp(14),dp(8));indicator.setBackground(bg(0xFF172B4D,14));
         recDot=text("●  ",22,0xFFFF8D7A,true);recLabel=text("PREPARANDO",16,0xFFFFFFFF,true);recLabel.setId(R.id.rec_indicator);recLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);indicator.addView(recDot);indicator.addView(recLabel);
