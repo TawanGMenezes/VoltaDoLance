@@ -142,6 +142,7 @@ public final class CameraLoop {
     private void startDual(){
         running=true;state.preparing();status("Verificando vídeo duplo para este aparelho…");final int token=++generation;
         final SurfaceTexture texture=preview.getSurfaceTexture();if(texture==null){fallbackDual("Prévia indisponível");return;}
+        texture.setDefaultBufferSize(Math.max(1,preview.getWidth()),Math.max(1,preview.getHeight()));
         final Surface view=new Surface(texture);previewSurface=view;preview.setScaleX(1f);
         io.execute(()->{
             ContinuousRecorder prepared=null;DualFrameComposer graph=null;
@@ -149,7 +150,6 @@ public final class CameraLoop {
                 DualCameraSupport.Result support=DualCameraSupport.inspect(activity);
                 if(!support.available)throw new IllegalStateException(support.message);
                 final DualCaptureConfig config=support.config;
-                texture.setDefaultBufferSize(config.outputMode.width,config.outputMode.height);
                 prepared=new ContinuousRecorder(activity,config.outputMode,0,pastSeconds,new ContinuousRecorder.Listener(){
                     public void onPcm(byte[] pcm,int length){listener.onPcm(pcm,length);}
                     public void onReady(){main.post(()->{if(current(token)){state.ready();status("Vídeo duplo • "+config.rearMode.height+"p / 30 fps • histórico de até "+pastSeconds+" s");}});}

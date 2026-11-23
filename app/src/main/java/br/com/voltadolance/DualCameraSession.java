@@ -75,6 +75,7 @@ final class DualCameraSession implements AutoCloseable {
                     if(rotations!=null&&Arrays.stream(rotations).anyMatch(x->x==CameraMetadata.SCALER_ROTATE_AND_CROP_NONE))request.set(CaptureRequest.SCALER_ROTATE_AND_CROP,CameraMetadata.SCALER_ROTATE_AND_CROP_NONE);
                 }
                 CameraModes.Mode mode=i==0?config.rearMode:config.frontMode;
+                // SurfaceTexture inputs have no direct-encoder EIS guarantee; prefer advertised OIS.
                 tuning[i]=CameraTuning.from(manager.getCameraCharacteristics(i==0?config.rearId:config.frontId),mode.width,mode.height,0);
                 float effective=tuning[i].apply(request,i==0?zoom:1f);if(i==0)zoom=effective;
                 requests[i]=request;

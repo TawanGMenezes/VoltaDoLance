@@ -350,10 +350,9 @@ public final class MainActivity extends ThemedActivity {
     }
     private void fitDualPreview(){
         if(cameraLoop==null||!cameraLoop.isDualVideo()||preview.getWidth()==0||preview.getHeight()==0)return;
-        float aspect=cameraLoop.previewAspectRatio();if(aspect<=0)return;
-        float width=preview.getWidth(),height=preview.getHeight();
-        float fittedWidth=Math.min(width,height*aspect),fittedHeight=fittedWidth/aspect;
-        Matrix fit=new Matrix();fit.setScale(fittedWidth/width,fittedHeight/height,width/2f,height/2f);preview.setTransform(fit);
+        // The compositor fits the actual EGL window on every frame, including after
+        // TextureView resets its buffer size on resize. A second Matrix fit distorts it.
+        preview.setTransform(new Matrix());
     }
     private void requestPermissionsIfNeeded() {
         if(!AlphaNotice.accepted(this)){showNotice();return;}

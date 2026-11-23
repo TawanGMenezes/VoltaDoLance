@@ -63,7 +63,8 @@ public class CameraToolsUiTest {
             assertTrue(preview.getTop()>=tools.getBottom());assertTrue(preview.getBottom()<=controls.getTop());assertTrue(preview.getHeight()>0);
             assertTrue(controls.getHeight()<=root.getHeight()/3+1);
             float[] values=new float[9];preview.getTransform(new Matrix()).getValues(values);
-            assertEquals(loop.previewAspectRatio(),preview.getWidth()*values[Matrix.MSCALE_X]/(preview.getHeight()*values[Matrix.MSCALE_Y]),.001f);
+            assertEquals(1f,values[Matrix.MSCALE_X],0f);assertEquals(1f,values[Matrix.MSCALE_Y],0f);
+            // GPU compositor owns aspect fitting; TextureView must not fit a second time.
             loop.setDualVideo(false);refresh(a);
             FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)preview.getLayoutParams();assertEquals(0,lp.topMargin);assertEquals(0,lp.bottomMargin);
         } finally {a.onDestroy();}
