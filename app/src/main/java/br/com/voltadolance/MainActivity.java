@@ -329,7 +329,13 @@ public final class MainActivity extends ThemedActivity {
                 Button choice=button(label,palette.tint,WHITE);choice.setTag(ratio);
                 choice.setMinWidth(dp(48));choice.setMinimumWidth(dp(48));choice.setMinHeight(dp(48));choice.setMinimumHeight(dp(48));
                 choice.setPadding(dp(10),0,dp(10),0);choice.setContentDescription("Zoom "+label);
-                choice.setOnClickListener(v->{if(cameraLoop.setZoom(ratio))refreshButtons();});
+                choice.setOnClickListener(v->{
+                    boolean changing=cameraLoop.requiresLensSwitch(ratio);
+                    if(changing){pendingVoiceRestart=true;voice.disable();voiceStatus="Voz aguardando a troca de lente";updateVoiceSubtitle();}
+                    boolean changed=cameraLoop.setZoom(ratio);
+                    if(changing&&!changed){pendingVoiceRestart=false;if(useVoice&&cameraLoop.isRunning())voice.enable();}
+                    refreshButtons();
+                });
                 LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,dp(48));lp.rightMargin=dp(4);zoomChoicesRow.addView(choice,lp);
             }
         }
@@ -341,7 +347,7 @@ public final class MainActivity extends ThemedActivity {
                 choice.setSelected(selected);choice.setTextColor(selected?0xFF172B4D:WHITE);
                 choice.setBackground(bg(selected?ACCENT:palette.tint,24));
             }
-            choice.setEnabled(enabled);choice.setAlpha(enabled?1f:0.45f);
+            boolean selectable=enabled&&cameraLoop.canSelectZoom((Float)choice.getTag());choice.setEnabled(selectable);choice.setAlpha(selectable?1f:0.45f);
             choice.setContentDescription("Zoom "+choice.getText()+(selected?", selecionado":""));
         }
         String stabilization=cameraLoop.stabilizationLabel();

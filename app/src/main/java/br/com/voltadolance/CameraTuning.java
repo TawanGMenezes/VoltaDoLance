@@ -31,6 +31,13 @@ public final class CameraTuning {
                         CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON), width, height, fps);
     }
 
+    static CameraTuning forPhysical(CameraCharacteristics camera,int width,int height,int fps){
+        // A pinned physical stream is not controlled by the logical camera's zoom ratio.
+        return new CameraTuning(1f,1f,false,null,
+            contains(camera.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES),CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON),
+            contains(camera.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION),CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON),width,height,fps);
+    }
+
     CameraTuning(float min, float max, boolean ratio, Rect sensor, boolean video,
                  boolean optical, int width, int height, int fps) {
         zoomRatio = ratio;
@@ -103,6 +110,7 @@ public final class CameraTuning {
     }
 
     public void observe(CaptureResult result) {
+        if(result==null){observeModes(null,null);return;}
         observeModes(result.get(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE),
                 result.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE));
     }

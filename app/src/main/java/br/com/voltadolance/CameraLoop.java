@@ -39,7 +39,10 @@ public final class CameraLoop {
     private boolean dualVideo;
     private CameraTuning tuning;
     private CaptureRequest.Builder repeatingRequest;
-    private float zoom=1f;
+    private float zoom=1f,rollbackZoom=1f;
+    private CameraLenses.Lens ultraWide,activeLens,rollbackLens;
+    private float[] primaryChoices;
+    private boolean ultraRejected;
     private int pastSeconds=15,orientation=90,generation,modeIndex,facing=CameraCharacteristics.LENS_FACING_BACK;
     private long maxEventMs=600000;
     private boolean running,closing,activityActive=true,safetyPaused,manualPaused,disposed;
@@ -54,30 +57,48 @@ public final class CameraLoop {
     public CaptureState state() { return state; }
     public void setPastSeconds(int seconds) { pastSeconds=seconds; if(recorder!=null) recorder.setPastSeconds(seconds); }
     public void setMode(String key) { requestedMode=key; }
-    public void setDualVideo(boolean enabled){if(!running&&!isCapturing()){dualVideo=enabled;if(enabled)facing=CameraCharacteristics.LENS_FACING_BACK;}}
+    public void setDualVideo(boolean enabled){if(!running&&!isCapturing()){dualVideo=enabled;if(enabled){facing=CameraCharacteristics.LENS_FACING_BACK;activeLens=null;}}}
     public boolean isDualVideo(){return dualVideo;}
     public float previewAspectRatio(){return dualConfig==null?9f/16f:dualConfig.outputMode.width/(float)dualConfig.outputMode.height;}
-    public float[] zoomChoices(){return dualVideo&&dualSession!=null?dualSession.zoomChoices():tuning==null?new float[]{1f}:tuning.choices();}
-    public float zoomRatio(){return dualVideo&&dualSession!=null?dualSession.zoomRatio():zoom;}
+    public float[] zoomChoices(){
+        if(dualVideo&&dualSession!=null)return dualSession.zoomChoices();
+        float[] normal=activeLens!=null&&primaryChoices!=null?primaryChoices:tuning==null?new float[]{1f}:tuning.choices();
+        return lensChoices(normal,facing==CameraCharacteristics.LENS_FACING_BACK&&!dualVideo?ultraWide:null);
+    }
+    static float[] lensChoices(float[] normal,CameraLenses.Lens lens){
+        if(lens==null||normal.length>0&&normal[0]<1f)return normal;
+        float[] choices=new float[normal.length+1];choices[0]=lens.ratio;System.arraycopy(normal,0,choices,1,normal.length);return choices;
+    }
+    public float zoomRatio(){return dualVideo&&dualSession!=null?dualSession.zoomRatio():activeLens==null?zoom:activeLens.ratio;}
+    boolean requiresLensSwitch(float ratio){return !dualVideo&&facing==CameraCharacteristics.LENS_FACING_BACK&&ultraWide!=null&&((activeLens==null&&Math.abs(ratio-ultraWide.ratio)<.025f)||(activeLens!=null&&Math.abs(ratio-activeLens.ratio)>=.025f));}
+    public boolean canSelectZoom(float ratio){return (state.canMark()||state.isRecording())&&(!state.isRecording()||!requiresLensSwitch(ratio));}
     public String stabilizationLabel(){return !running?"Estabilização • câmera parada":dualVideo&&dualSession!=null?dualSession.stabilizationLabel():tuning==null?"Estabilização • verificando suporte":tuning.stabilizationLabel();}
     public boolean setZoom(float ratio){
         if(!running||closing||!(state.canMark()||state.isRecording()))return false;
         if(dualVideo)return dualSession!=null&&dualSession.setZoom(ratio);
+        if(requiresLensSwitch(ratio)){
+            if(state.isRecording()){listener.onError("Encerre e salve o lance antes de trocar a lente");return false;}
+            return switchRearLens(activeLens==null?ultraWide:null,ratio);
+        }
+        if(activeLens!=null)return true;
         if(tuning==null||session==null||repeatingRequest==null)return false;
         float previous=zoom;
         try{zoom=tuning.apply(repeatingRequest,ratio);submitRepeating();return true;}
         catch(Exception e){try{zoom=tuning.apply(repeatingRequest,previous);submitRepeating();}catch(Exception ignored){}listener.onError("Esta aproximação não foi aceita pela câmera");return false;}
     }
     private final CameraCaptureSession.CaptureCallback tuningResults=new CameraCaptureSession.CaptureCallback(){
-        @Override public void onCaptureCompleted(CameraCaptureSession owner,CaptureRequest request,TotalCaptureResult result){if(owner==session&&tuning!=null)tuning.observe(result);}
+        @Override public void onCaptureCompleted(CameraCaptureSession owner,CaptureRequest request,TotalCaptureResult result){if(owner==session&&tuning!=null){
+            CaptureResult actual=activeLens!=null&&activeLens.physicalId!=null?result.getPhysicalCameraResults().get(activeLens.physicalId):result;
+            if(actual!=null)tuning.observe(actual);
+        }}
     };
     private void submitRepeating()throws CameraAccessException{
         try{session.setRepeatingRequest(repeatingRequest.build(),tuningResults,main);}
         catch(IllegalArgumentException e){if(tuning==null||!tuning.disableVideoStabilization())throw e;tuning.apply(repeatingRequest,zoom);session.setRepeatingRequest(repeatingRequest.build(),tuningResults,main);}
     }
-    public void setFacing(int value) {if(!running&&!isCapturing())facing=value==CameraCharacteristics.LENS_FACING_FRONT?value:CameraCharacteristics.LENS_FACING_BACK;}
+    public void setFacing(int value) {if(!running&&!isCapturing()){int next=value==CameraCharacteristics.LENS_FACING_FRONT?value:CameraCharacteristics.LENS_FACING_BACK;if(next!=facing)activeLens=null;facing=next;}}
     public int facing() {return facing;}
-    public String lensLabel(){return facing==CameraCharacteristics.LENS_FACING_FRONT?"Frontal":"Traseira";}
+    public String lensLabel(){return facing==CameraCharacteristics.LENS_FACING_FRONT?"Frontal":activeLens==null?"Traseira":"Ultra-angular";}
     public String selectedMode(){return dualVideo||modeIndex<0||modeIndex>=modes.size()?requestedMode:modes.get(modeIndex).key();}
     private void persistSelection(){activity.getSharedPreferences("local_settings",0).edit().putInt("camera_facing",facing).putString("video_mode",selectedMode()).apply();}
     public boolean switchCamera() {
@@ -89,13 +110,25 @@ public final class CameraLoop {
             List<CameraModes.Mode> supported=CameraModes.detect(manager.getCameraCharacteristics(target));
             int selected=CameraModes.chooseModeIndex(supported,selectedMode());
             if(selected<0)throw new IllegalStateException("Nenhum modo de vídeo compatível nesta câmera");
-            int previous=facing;String previousMode=selectedMode();
-            stopBuffer();facing=destination;requestedMode=supported.get(selected).key();modes=supported;modeIndex=selected;
+            int previous=facing;String previousMode=selectedMode();CameraLenses.Lens previousLens=activeLens;float previousZoom=zoom;
+            stopBuffer();activeLens=null;zoom=1f;facing=destination;requestedMode=supported.get(selected).key();modes=supported;modeIndex=selected;
             preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);
             if(manualPaused){persistSelection();state.stopped();status(lensLabel()+" selecionada • "+modeLabel()+" • histórico pausado");}
-            else{rollbackFacing=previous;rollbackMode=previousMode;start();}
+            else{rollbackFacing=previous;rollbackMode=previousMode;rollbackLens=previousLens;rollbackZoom=previousZoom;start();}
             return true;
         }catch(Exception e){listener.onError("Não foi possível trocar: "+e.getMessage());return false;}
+    }
+    private boolean switchRearLens(CameraLenses.Lens target,float ratio){
+        if(isCapturing()||closing||disposed||dualVideo||rollbackFacing!=null)return false;
+        try{
+            CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
+            List<CameraModes.Mode> available=target==null?CameraModes.detect(manager.getCameraCharacteristics(CameraModes.backCamera(manager))):target.modes;
+            int selected=CameraModes.chooseModeIndex(available,selectedMode());if(selected<0)throw new IllegalStateException("Sem formato de vídeo compatível");
+            CameraLenses.Lens previous=activeLens;String previousMode=selectedMode();float previousZoom=zoom;
+            stopBuffer();activeLens=target;zoom=target==null?ratio:1f;requestedMode=available.get(selected).key();modes=available;modeIndex=selected;
+            rollbackFacing=facing;rollbackMode=previousMode;rollbackLens=previous;rollbackZoom=previousZoom;
+            state.preparing();status("Trocando para "+lensLabel().toLowerCase(Locale.ROOT)+" • preparando novo histórico");start();return true;
+        }catch(Exception e){listener.onError("Não foi possível trocar a lente: "+e.getMessage());return false;}
     }
     public void setPostMinutes(int minutes) {
         if(!Arrays.asList(0,3,10,20,30,60).contains(minutes)) throw new IllegalArgumentException("Duração inválida");
@@ -129,8 +162,14 @@ public final class CameraLoop {
             CameraManager manager=(CameraManager)activity.getSystemService(Context.CAMERA_SERVICE);
             cameraId=CameraModes.cameraForFacing(manager,facing);
             CameraCharacteristics cc=manager.getCameraCharacteristics(cameraId);
+            if(facing==CameraCharacteristics.LENS_FACING_BACK){
+                primaryChoices=CameraTuning.from(cc,1280,720,30).choices();
+                CameraLenses.Result lenses=CameraLenses.discover(activity);ultraWide=ultraRejected?null:lenses.ultraWide;
+                if(primaryChoices.length>0&&primaryChoices[0]<1f)ultraWide=null;
+                if(activeLens!=null){cameraId=activeLens.cameraId;cc=activeLens.characteristics;}
+            }
             Integer angle=cc.get(CameraCharacteristics.SENSOR_ORIENTATION); if(angle!=null) orientation=angle;
-            modes=CameraModes.detect(cc);
+            modes=activeLens!=null?activeLens.modes:CameraModes.detect(cc);
             if(modes.isEmpty()) throw new IllegalStateException("Nenhum modo compatível informado");
             modeIndex=CameraModes.chooseModeIndex(modes,requestedMode);
             preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);
@@ -188,7 +227,7 @@ public final class CameraLoop {
                 ContinuousRecorder prepared=new ContinuousRecorder(activity,mode,orientation,pastSeconds,new ContinuousRecorder.Listener() {
                     public void onPcm(byte[] pcm,int length) { listener.onPcm(pcm,length); }
                     public void onReady() {
-                        main.post(()->{ if(current(token)) { if(rollbackFacing!=null){persistSelection();rollbackFacing=null;rollbackMode=null;}state.ready(); status(lensLabel()+" • "+mode.label()+" • histórico de até "+pastSeconds+" s"); } });
+                        main.post(()->{ if(current(token)) { if(rollbackFacing!=null){persistSelection();rollbackFacing=null;rollbackMode=null;rollbackLens=null;}state.ready(); status(lensLabel()+" • "+mode.label()+" • histórico de até "+pastSeconds+" s"); } });
                     }
                     public void onError(String message) { main.post(()->{ if(current(token)) fail(message); }); }
                 });
@@ -219,9 +258,10 @@ public final class CameraLoop {
                         request.addTarget(view); request.addTarget(owner.inputSurface());
                         request.set(CaptureRequest.CONTROL_MODE,CaptureRequest.CONTROL_MODE_AUTO);
                         request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,mode.aeRange);
-                        tuning=CameraTuning.from(manager.getCameraCharacteristics(cameraId),mode.width,mode.height,mode.fps);
+                        CameraCharacteristics source=activeLens==null?manager.getCameraCharacteristics(cameraId):activeLens.characteristics;
+                        tuning=activeLens!=null&&activeLens.physicalId!=null?CameraTuning.forPhysical(source,mode.width,mode.height,mode.fps):CameraTuning.from(source,mode.width,mode.height,mode.fps);
                         zoom=tuning.apply(request,zoom);repeatingRequest=request;
-                        device.createCaptureSession(Arrays.asList(view,owner.inputSurface()),new CameraCaptureSession.StateCallback() {
+                        createSession(device,Arrays.asList(view,owner.inputSurface()),new CameraCaptureSession.StateCallback() {
                             public void onConfigured(CameraCaptureSession configured) {
                                 if(!current(token)) { configured.close(); return; }
                                 session=configured;
@@ -233,13 +273,20 @@ public final class CameraLoop {
                             public void onConfigureFailed(CameraCaptureSession configured) {
                                 configured.close(); if(current(token)) retryMode("Modo rejeitado pela câmera");
                             }
-                        },main);
+                        });
                     } catch(Exception e) { retryMode("Falha ao preparar câmera: "+e.getMessage()); }
                 }
                 public void onDisconnected(CameraDevice device) { device.close(); if(current(token)) fail("Câmera desconectada"); }
                 public void onError(CameraDevice device,int code) { device.close(); if(current(token)) fail("Erro na câmera ("+code+")"); }
             },main);
         } catch(Exception e) { retryMode("Falha ao abrir câmera: "+e.getMessage()); }
+    }
+    private void createSession(CameraDevice device,List<Surface> surfaces,CameraCaptureSession.StateCallback callback)throws Exception{
+        if(activeLens==null||activeLens.physicalId==null){device.createCaptureSession(surfaces,callback,main);return;}
+        android.hardware.camera2.params.SessionConfiguration config=PhysicalLensSession.configuration(surfaces,activeLens.physicalId,command->main.post(command),callback);
+        try{if(!device.isSessionConfigurationSupported(config))throw new IllegalArgumentException("Formato não disponível nesta lente física");}
+        catch(UnsupportedOperationException ignored){/* The platform permits trying a session when the query is unavailable. */}
+        device.createCaptureSession(config);
     }
     private void retryMode(String reason) {
         if(dualVideo){fallbackDual(reason);return;}
@@ -326,12 +373,16 @@ public final class CameraLoop {
     private void error(String message) { state.error(); listener.onError(message); }
     private void fail(String message) {
         if(state.isRecording()) { safetyPaused=true; safetyNotice=message; finishAndSave(); return; }
-        if(restorePreviousCamera(message))return;
+        if(restorePreviousCamera(message,true))return;
+        if(activeLens!=null){stopBuffer();activeLens=null;ultraWide=null;ultraRejected=true;state.stopped();listener.onError(message+" • voltando à câmera principal");if(activityActive&&!manualPaused&&!disposed)start();return;}
         stopBuffer(); error(message);
     }
-    private boolean restorePreviousCamera(String reason){
+    private boolean restorePreviousCamera(String reason){return restorePreviousCamera(reason,false);}
+    private boolean restorePreviousCamera(String reason,boolean rejected){
         if(rollbackFacing==null)return false;
-        stopBuffer();facing=rollbackFacing;requestedMode=rollbackMode;rollbackFacing=null;rollbackMode=null;modes=Collections.emptyList();modeIndex=0;
+        boolean rejectedUltra=activeLens!=null&&activeLens!=rollbackLens;
+        stopBuffer();facing=rollbackFacing;requestedMode=rollbackMode;activeLens=rollbackLens;zoom=rollbackZoom;rollbackFacing=null;rollbackMode=null;rollbackLens=null;modes=Collections.emptyList();modeIndex=0;
+        if(rejectedUltra&&rejected){ultraRejected=true;ultraWide=null;}
         persistSelection();preview.setScaleX(facing==CameraCharacteristics.LENS_FACING_FRONT?-1f:1f);state.stopped();status(reason+" • voltando à câmera "+lensLabel().toLowerCase(Locale.ROOT));
         if(activityActive&&!manualPaused&&!disposed)start();return true;
     }
